@@ -39,7 +39,9 @@ signage_precheck/          # ядро (не зависит от UI — легк�
 ├── agent.py               # SignagePreCheckAgent — вызов Claude
 └── render.py              # форматирование отчёта (Markdown / текст)
 app.py                     # Streamlit-интерфейс для менеджера
+bot.py                     # Telegram-бот (input/output прямо в чате)
 cli.py                     # запуск из терминала
+Procfile                   # для хостинга (Railway/Render): worker: python bot.py
 ```
 
 ## Установка
@@ -70,6 +72,29 @@ python cli.py \
 # JSON-вывод для интеграции:
 python cli.py --description "..." --json
 ```
+
+**Telegram-бот:**
+
+Самый простой способ для менеджера — присылать материалы прямо в чат с телефона.
+
+1. Получите токен бота у [@BotFather](https://t.me/BotFather) (команда `/newbot`).
+2. Задайте переменные окружения (в `.env` или на хостинге):
+   ```
+   TELEGRAM_BOT_TOKEN=123456:ABC-...
+   ANTHROPIC_API_KEY=sk-ant-...
+   ```
+3. Запустите:
+   ```bash
+   python bot.py
+   ```
+
+Использование в чате: пришлите боту текст/фото фасада/эскиз/PDF (можно несколькими
+сообщениями), затем отправьте `/analyze` — бот вернёт отчёт текстом и файлом `.md`.
+Команды: `/analyze`, `/reset`, `/help`.
+
+Бот работает на long-polling — публичный URL не нужен. Деплоится на любой хостинг
+(Railway, Render, Replit, VPS): запускающая команда — `python bot.py` (см. `Procfile`),
+переменные окружения те же два ключа.
 
 **Как библиотека:**
 
