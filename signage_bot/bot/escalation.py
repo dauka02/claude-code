@@ -58,7 +58,7 @@ class Escalator:
         self._group_id = group_id
 
     # ------------------------- управление темой ---------------------------- #
-    async def ensure_topic(self, user: User) -> int:
+    async def ensure_topic(self, user: User) -> int | None:
         if user.topic_id:
             # Переоткрыть, если была закрыта/архивирована.
             try:
@@ -71,7 +71,16 @@ class Escalator:
 
         name = user.username or f"id{user.user_id}"
         title = f"{name} · {user.address or '—'} · #{user.user_id}"[:128]
-        topic = await self._bot.create_forum_topic(self._group_id, name=title)
+        try:
+            topic = await self._bot.create_forum_topic(self._group_id, name=title)
+        except Exception as e:  # noqa: BLE001 — не валим обработчик из-за темы
+            log.error(
+                "Не удалось создать тему в группе %s: %s. "
+                "Проверьте: бот — админ с правом «Управление темами», в группе "
+                "включены Темы, OPERATOR_GROUP_ID верный.",
+                self._group_id, e,
+            )
+            return None
         topic_id = topic.message_thread_id
         await self._state.update_user(user.user_id, topic_id=topic_id)
         user.topic_id = topic_id
@@ -114,27 +123,21 @@ class Escalator:
             f"\n<b>Вопрос:</b>\n{question or '—'}\n"
             f"\nКоманды: /take — взять · /close — закрыть"
         )
-        try:
-            await self._bot.send_message(
-                self._group_id, card, message_thread_id=topic_id
+        if topic_id is None:
+            # Тему создать не удалось — шлём карточку в общий чат группы,
+            # чтобы обращение не потерялось, и подсказываем, что проверить.
+            card += (
+                "\n\n⚠️ <i>Не удалось создать отдельную тему. Проверьте, что бот "
+                "— админ с правом «Управление темами», а в группе включены Темы.</i>"
             )
-        except TelegramBadRequest:
-            log.exception("Не удалось отправить карточку в тему %s", topic_id)
+        await self._send(card, topic_id)
 
         # Эскиз/фото отдельным сообщением — само изображение + ссылка Drive.
         if photo and photo.file_id:
             caption = "🖼 Эскиз/фото клиента"
             if photo.drive_link:
                 caption += f"\nDrive: {photo.drive_link}"
-            try:
-                await self._bot.send_photo(
-                    self._group_id,
-                    photo.file_id,
-                    caption=caption,
-                    message_thread_id=topic_id,
-                )
-            except TelegramBadRequest:
-                log.exception("Не удалось отправить фото в тему %s", topic_id)
+            await self._send_photo(photo.file_id, caption, topic_id)
 
         # Вне рабочих часов — заметка клиенту о приёмном времени.
         if notify_client_offhours and not self._schedule.is_working():
@@ -156,3 +159,24 @@ class Escalator:
                 pass
 
         return esc_id
+
+    # ---------------------- безопасная отправка в группу ------------------- #
+    async def _send(self, text: str, topic_id: int | None) -> None:
+        kwargs = {"message_thread_id": topic_id} if topic_id else {}
+        try:
+            await self._bot.send_message(self._group_id, text, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            log.error("Не удалось отправить сообщение в группу %s: %s",
+                      self._group_id, e)
+
+    async def _send_photo(
+        self, file_id: str, caption: str, topic_id: int | None
+    ) -> None:
+        kwargs = {"message_thread_id": topic_id} if topic_id else {}
+        try:
+            await self._bot.send_photo(
+                self._group_id, file_id, caption=caption, **kwargs
+            )
+        except Exception as e:  # noqa: BLE001
+            log.error("Не удалось отправить фото в группу %s: %s",
+                      self._group_id, e)

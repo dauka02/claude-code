@@ -144,7 +144,9 @@ async def on_text(message: Message, services: Services) -> None:
         return
 
     if cls.can_answer and cls.confidence >= cfg.confidence_threshold:
-        if repeat >= 2:
+        # Повтор одного вопроса много раз подряд → эскалация (защита от зацикливания).
+        # Порог 3: на повторную/переформулированную просьбу бот всё ещё отвечает.
+        if repeat >= 3:
             await services.escalator.escalate(user, question=text, reason="repeat")
             return
         kb_text = services.kb.text(cls.intent_id, user.lang)
@@ -179,24 +181,19 @@ async def on_text(message: Message, services: Services) -> None:
 # --------------------------- релей в тему ---------------------------------- #
 async def _relay_to_topic(message: Message, services: Services, user: User) -> None:
     """В режиме human клиентские сообщения публикуются в тему оператора."""
-    if not user.topic_id:
-        # Нет темы (рассинхрон) — создадим через эскалацию, чтобы не потерять.
-        await services.escalator.escalate(
-            user, question=message.text or "[медиа]", reason="cannot_answer"
-        )
-        return
     gid = services.cfg.operator_group_id
+    # Если темы нет (не удалось создать) — релеим в общий чат группы, без зацикливания.
+    kwargs = {"message_thread_id": user.topic_id} if user.topic_id else {}
     try:
         if message.photo:
             await services.bot.send_photo(
                 gid, message.photo[-1].file_id,
                 caption=f"👤 Клиент: {message.caption or ''}".strip(),
-                message_thread_id=user.topic_id,
+                **kwargs,
             )
         else:
             await services.bot.send_message(
-                gid, f"👤 Клиент: {message.text or '[медиа]'}",
-                message_thread_id=user.topic_id,
+                gid, f"👤 Клиент: {message.text or '[медиа]'}", **kwargs,
             )
     except Exception:  # noqa: BLE001
-        log.exception("Не удалось релеить сообщение клиента в тему %s", user.topic_id)
+        log.exception("Не удалось релеить сообщение клиента в группу %s", gid)
