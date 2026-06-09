@@ -72,9 +72,11 @@ class Config:
             "GOOGLE_SERVICE_ACCOUNT_JSON", "./service_account.json"
         )
     )
-    sheet_id: str = field(default_factory=lambda: _get("SHEET_ID", required=True))
+    # Sheets/Drive опциональны: без них бот работает в облегчённом режиме —
+    # KB берётся из локального CSV, логи в Sheets и загрузка в Drive отключены.
+    sheet_id: str = field(default_factory=lambda: _get("SHEET_ID", ""))
     gdrive_folder_id: str = field(
-        default_factory=lambda: _get("GDRIVE_FOLDER_ID", required=True)
+        default_factory=lambda: _get("GDRIVE_FOLDER_ID", "")
     )
 
     confidence_threshold: float = field(

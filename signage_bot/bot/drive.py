@@ -65,3 +65,17 @@ class Drive:
         except Exception:  # noqa: BLE001 — не критично, ссылка всё равно есть
             log.warning("Не удалось выставить доступ по ссылке для %s", file_id)
         return link
+
+
+class NullDrive:
+    """Заглушка, когда GDRIVE_FOLDER_ID не задан: фото в Drive не грузится.
+
+    Фото всё равно уходит оператору в тему (через Telegram file_id) — просто
+    без ссылки на Drive.
+    """
+
+    async def connect(self) -> None:
+        return None
+
+    async def upload_photo(self, data: bytes, user_id: int) -> str:
+        return ""

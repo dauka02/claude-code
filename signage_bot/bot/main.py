@@ -11,7 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from .config import load_config
-from .drive import Drive
+from .drive import Drive, NullDrive
 from .escalation import Escalator
 from .handlers import operator as operator_handlers
 from .handlers import user as user_handlers
@@ -21,7 +21,7 @@ from .llm import LLM
 from .photos import PhotoFlow
 from .schedule import WorkSchedule
 from .services import Services
-from .sheets import Sheets
+from .sheets import NullSheets, Sheets
 from .state import State
 
 
@@ -45,16 +45,37 @@ async def run() -> None:
     state = State(cfg.db_path)
     await state.connect()
 
-    sheets = Sheets(cfg.google_sa_json, cfg.sheet_id)
-    await sheets.connect()
+    # Google Sheets (логи) — опционально. Без SHEET_ID работаем без логирования,
+    # а KB берём из локального CSV.
+    sheets_enabled = bool(cfg.sheet_id)
+    if sheets_enabled:
+        sheets = Sheets(cfg.google_sa_json, cfg.sheet_id)
+        await sheets.connect()
+        if cfg.seed_kb_if_empty:
+            await sheets.seed_kb_if_empty(cfg.kb_seed_path)
+    else:
+        sheets = NullSheets()
+        log.warning(
+            "SHEET_ID не задан — логи в Google Sheets отключены, KB берётся из %s",
+            cfg.kb_seed_path,
+        )
 
-    drive = Drive(cfg.google_sa_json, cfg.gdrive_folder_id)
-    await drive.connect()
+    # Google Drive (фото) — опционально. Без GDRIVE_FOLDER_ID фото не грузится
+    # в Drive, но всё равно уходит оператору в тему.
+    drive_enabled = bool(cfg.gdrive_folder_id)
+    if drive_enabled:
+        drive = Drive(cfg.google_sa_json, cfg.gdrive_folder_id)
+        await drive.connect()
+    else:
+        drive = NullDrive()
+        log.warning("GDRIVE_FOLDER_ID не задан — загрузка фото в Drive отключена")
 
-    if cfg.seed_kb_if_empty:
-        await sheets.seed_kb_if_empty(cfg.kb_seed_path)
-
-    kb = KnowledgeBase(sheets, cfg.kb_refresh_seconds)
+    kb = KnowledgeBase(
+        sheets,
+        cfg.kb_refresh_seconds,
+        csv_path=cfg.kb_seed_path,
+        use_csv=not sheets_enabled,
+    )
     await kb.load()
     kb.start_refresh()
 

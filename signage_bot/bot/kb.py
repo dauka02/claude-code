@@ -35,14 +35,22 @@ class KBEntry:
 
 
 class KnowledgeBase:
-    def __init__(self, sheets: Sheets, refresh_seconds: int) -> None:
+    def __init__(
+        self,
+        sheets: Sheets,
+        refresh_seconds: int,
+        csv_path: str = "",
+        use_csv: bool = False,
+    ) -> None:
         self._sheets = sheets
         self._refresh = refresh_seconds
+        self._csv_path = csv_path
+        self._use_csv = use_csv
         self._entries: dict[int, KBEntry] = {}
         self._task: asyncio.Task | None = None
 
     async def load(self) -> None:
-        records = await self._sheets.read_kb()
+        records = self._read_csv() if self._use_csv else await self._sheets.read_kb()
         entries: dict[int, KBEntry] = {}
         for r in records:
             raw_id = str(r.get("id", "")).strip()
@@ -56,7 +64,18 @@ class KnowledgeBase:
                 active=_truthy(r.get("active", "")),
             )
         self._entries = entries
-        log.info("KB загружена: %d записей", len(entries))
+        src = "CSV" if self._use_csv else "Sheets"
+        log.info("KB загружена из %s: %d записей", src, len(entries))
+
+    def _read_csv(self) -> list[dict]:
+        import csv
+        import os
+
+        if not self._csv_path or not os.path.exists(self._csv_path):
+            log.warning("CSV базы знаний не найден: %s", self._csv_path)
+            return []
+        with open(self._csv_path, encoding="utf-8") as f:
+            return list(csv.DictReader(f))
 
     def start_refresh(self) -> None:
         if self._task is None:

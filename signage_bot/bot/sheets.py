@@ -243,3 +243,38 @@ class Sheets:
             if addr and addr == normalized_address.strip().lower():
                 return row
         return None
+
+
+class NullSheets:
+    """Заглушка на случай, когда SHEET_ID не задан (облегчённый режим).
+
+    Повторяет интерфейс Sheets, но ничего не пишет. KB при этом грузится из
+    локального CSV (см. KnowledgeBase(use_csv=True)).
+    """
+
+    async def connect(self) -> None:
+        return None
+
+    async def read_kb(self) -> list[dict[str, Any]]:
+        return []
+
+    async def seed_kb_if_empty(self, csv_path: str) -> int:
+        return 0
+
+    async def log_message(self, **_: Any) -> None:
+        return None
+
+    async def log_escalation(self, **_: Any) -> None:
+        return None
+
+    async def close_escalation_row(self, *_: Any, **__: Any) -> None:
+        return None
+
+    async def log_intake(self, **_: Any) -> None:
+        return None
+
+    async def log_photo(self, **_: Any) -> None:
+        return None
+
+    async def find_building(self, normalized_address: str) -> dict[str, Any] | None:
+        return None
