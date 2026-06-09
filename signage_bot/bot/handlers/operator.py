@@ -56,11 +56,21 @@ async def cmd_take(message: Message, services: Services) -> None:
 
 # ------------------------------ /close ------------------------------------- #
 @router.message(Command("close"))
-async def cmd_close(message: Message, services: Services) -> None:
+async def cmd_close(
+    message: Message, command: CommandObject, services: Services
+) -> None:
     topic_id = message.message_thread_id
     user = await services.state.get_user_by_topic(topic_id) if topic_id else None
+    # Аварийный режим: /close <user_id> в общем чате (когда темы не работают).
     if not user:
-        await message.reply("Команда /close работает внутри темы клиента.")
+        arg = (command.args or "").strip().lstrip("#")
+        if arg.isdigit():
+            user = await services.state.get_user(int(arg))
+    if not user:
+        await message.reply(
+            "Команда /close работает внутри темы клиента "
+            "или с указанием: /close <user_id>."
+        )
         return
 
     # esc_id берём ДО закрытия — после close_escalation открытой строки не будет.
@@ -86,12 +96,14 @@ async def cmd_close(message: Message, services: Services) -> None:
         pass
 
     await message.reply("☑️ Обращение закрыто, клиент снова на боте.")
-    try:
-        await services.bot.close_forum_topic(
-            services.cfg.operator_group_id, topic_id
-        )
-    except TelegramBadRequest:
-        pass
+    close_topic = topic_id or user.topic_id
+    if close_topic:
+        try:
+            await services.bot.close_forum_topic(
+                services.cfg.operator_group_id, close_topic
+            )
+        except TelegramBadRequest:
+            pass
 
 
 # ------------------------------ /list -------------------------------------- #

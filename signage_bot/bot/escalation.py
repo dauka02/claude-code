@@ -114,12 +114,13 @@ class Escalator:
         )
 
         reason_text = REASONS.get(reason, reason)
+        who = f"@{user.username} " if user.username else ""
         card = (
             "🆕 <b>Новое обращение</b>\n"
             f"Причина: {reason_text}\n"
             f"Язык: {user.lang}\n"
             f"Адрес: {user.address or '—'}\n"
-            f"Клиент: {('@' + user.username) if user.username else user.user_id}\n"
+            f"Клиент: {who}(id <code>{user.user_id}</code>)\n"
             f"\n<b>Вопрос:</b>\n{question or '—'}\n"
             f"\nКоманды: /take — взять · /close — закрыть"
         )
@@ -128,7 +129,8 @@ class Escalator:
             # чтобы обращение не потерялось, и подсказываем, что проверить.
             card += (
                 "\n\n⚠️ <i>Не удалось создать отдельную тему. Проверьте, что бот "
-                "— админ с правом «Управление темами», а в группе включены Темы.</i>"
+                "— админ с правом «Управление темами», а в группе включены Темы. "
+                f"Закрыть это обращение можно командой /close {user.user_id}</i>"
             )
         await self._send(card, topic_id)
 
