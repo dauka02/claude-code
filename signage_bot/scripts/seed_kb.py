@@ -15,9 +15,9 @@ import sys
 
 import gspread
 from dotenv import load_dotenv
-from google.oauth2.service_account import Credentials
 
 from bot.config import load_config
+from bot.gauth import service_account_credentials
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -35,7 +35,7 @@ def main() -> None:
         reader = csv.DictReader(f)
         rows = [[r.get(h, "") for h in HEADERS] for r in reader]
 
-    creds = Credentials.from_service_account_file(cfg.google_sa_json, scopes=SCOPES)
+    creds = service_account_credentials(cfg.google_sa_json, SCOPES)
     gc = gspread.authorize(creds)
     ss = gc.open_by_key(cfg.sheet_id)
     try:

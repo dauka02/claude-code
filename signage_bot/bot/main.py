@@ -51,6 +51,9 @@ async def run() -> None:
     drive = Drive(cfg.google_sa_json, cfg.gdrive_folder_id)
     await drive.connect()
 
+    if cfg.seed_kb_if_empty:
+        await sheets.seed_kb_if_empty(cfg.kb_seed_path)
+
     kb = KnowledgeBase(sheets, cfg.kb_refresh_seconds)
     await kb.load()
     kb.start_refresh()

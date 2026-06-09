@@ -102,6 +102,14 @@ class Config:
 
     db_path: str = field(default_factory=lambda: _get("DB_PATH", "./data/state.db"))
 
+    # Авто-сид KB при первом старте (если вкладка KB пустая) — удобно на Railway.
+    seed_kb_if_empty: bool = field(
+        default_factory=lambda: _bool("SEED_KB_IF_EMPTY", True)
+    )
+    kb_seed_path: str = field(
+        default_factory=lambda: _get("KB_SEED_PATH", "KB_seed.csv")
+    )
+
 
 def load_config() -> Config:
     return Config()

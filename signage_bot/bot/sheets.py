@@ -12,7 +12,8 @@ import time
 from typing import Any, Optional
 
 import gspread
-from google.oauth2.service_account import Credentials
+
+from .gauth import service_account_credentials
 
 log = logging.getLogger("signage.sheets")
 
@@ -62,7 +63,7 @@ class Sheets:
         await asyncio.to_thread(self._connect_sync)
 
     def _connect_sync(self) -> None:
-        creds = Credentials.from_service_account_file(self._sa_path, scopes=SCOPES)
+        creds = service_account_credentials(self._sa_path, SCOPES)
         self._gc = gspread.authorize(creds)
         self._ss = self._gc.open_by_key(self._sheet_id)
         existing = {w.title: w for w in self._ss.worksheets()}
@@ -91,6 +92,32 @@ class Sheets:
     # ------------------------------- KB ------------------------------------ #
     async def read_kb(self) -> list[dict[str, Any]]:
         return await asyncio.to_thread(lambda: self._sheet("KB").get_all_records())
+
+    async def seed_kb_if_empty(self, csv_path: str) -> int:
+        """Если вкладка KB пустая — заливает в неё CSV. Возвращает число строк.
+
+        Удобно для Railway: первый деплой сам наполняет базу, повторные —
+        ничего не трогают (менеджеры уже могли отредактировать KB вручную).
+        """
+        return await asyncio.to_thread(self._seed_kb_if_empty_sync, csv_path)
+
+    def _seed_kb_if_empty_sync(self, csv_path: str) -> int:
+        import csv
+        import os
+
+        ws = self._sheet("KB")
+        if ws.get_all_records():
+            return 0  # уже наполнена — не трогаем
+        if not os.path.exists(csv_path):
+            log.warning("Файл сида KB не найден: %s", csv_path)
+            return 0
+        headers = TABS["KB"]
+        with open(csv_path, encoding="utf-8") as f:
+            rows = [[r.get(h, "") for h in headers] for r in csv.DictReader(f)]
+        if rows:
+            ws.update("A1", [headers] + rows, value_input_option="USER_ENTERED")
+            log.info("KB засеяна из %s: %d строк", csv_path, len(rows))
+        return len(rows)
 
     # ------------------------------ запись --------------------------------- #
     async def _append(self, title: str, row: list[Any]) -> None:

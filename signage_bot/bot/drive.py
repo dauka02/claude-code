@@ -12,9 +12,10 @@ import io
 import logging
 import time
 
-from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
+
+from .gauth import service_account_credentials
 
 log = logging.getLogger("signage.drive")
 
@@ -31,7 +32,7 @@ class Drive:
         await asyncio.to_thread(self._connect_sync)
 
     def _connect_sync(self) -> None:
-        creds = Credentials.from_service_account_file(self._sa_path, scopes=SCOPES)
+        creds = service_account_credentials(self._sa_path, SCOPES)
         self._service = build("drive", "v3", credentials=creds, cache_discovery=False)
 
     async def upload_photo(self, data: bytes, user_id: int) -> str:
