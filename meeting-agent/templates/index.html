@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-протокол совещания</title>
+<style>
+  :root { --bg:#f4f1ea; --fg:#23201b; --accent:#c2622f; --muted:#8a8478; --card:#fff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: Georgia, 'Times New Roman', serif; background:var(--bg); color:var(--fg); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 32px 20px 80px; }
+  h1 { font-size: 1.9rem; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background:var(--card); border:1px solid #e4ded2; border-radius:12px; padding:20px; margin-bottom:18px; }
+  label { font-weight:bold; display:block; margin-bottom:8px; }
+  textarea { width:100%; min-height:180px; padding:12px; font:inherit; border:1px solid #d8d2c4; border-radius:8px; resize:vertical; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  button { font:inherit; cursor:pointer; border:none; border-radius:8px; padding:11px 18px; }
+  .primary { background:var(--accent); color:#fff; font-weight:bold; width:100%; font-size:1.05rem; }
+  .primary:disabled { opacity:.5; cursor:default; }
+  .ghost { background:#efe9dc; color:var(--fg); }
+  .rec { background:#b3261e; color:#fff; }
+  .rec.active { background:#7a1812; }
+  .hint { color:var(--muted); font-size:.85rem; margin-top:8px; }
+  .tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .tab { flex:1; text-align:center; padding:10px; border-radius:8px; background:#efe9dc; cursor:pointer; }
+  .tab.active { background:var(--accent); color:#fff; font-weight:bold; }
+  .pane { display:none; } .pane.active { display:block; }
+  table { width:100%; border-collapse:collapse; margin-top:10px; }
+  th,td { border:1px solid #e0dacd; padding:8px; text-align:left; font-size:.92rem; }
+  th { background:#efe9dc; }
+  pre { background:#2b2722; color:#eee; padding:14px; border-radius:8px; overflow:auto; font-family:ui-monospace,monospace; font-size:.82rem; }
+  .err { background:#fde8e6; border:1px solid #e0a; color:#a12; padding:12px; border-radius:8px; }
+  audio { width:100%; margin-top:10px; }
+  a.dl { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; padding:11px 18px; border-radius:8px; font-weight:bold; }
+  .spin { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📝 AI-протокол совещания</h1>
+  <p class="sub">Запишите встречу с микрофона, загрузите аудио или вставьте текст — получите .docx с повесткой, решениями и поручениями.</p>
+
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active" data-pane="text">📄 Текст</div>
+      <div class="tab" data-pane="audio">🎙️ Аудио</div>
+    </div>
+
+    <div class="pane active" id="pane-text">
+      <label>Транскрипт встречи</label>
+      <textarea id="transcript" placeholder="Вставьте сюда расшифровку совещания…"></textarea>
+    </div>
+
+    <div class="pane" id="pane-audio">
+      <label>🔴 Запись с микрофона</label>
+      <div class="row">
+        <button class="rec" id="recBtn">● Начать запись</button>
+        <span id="recTime" class="hint">00:00</span>
+      </div>
+      <audio id="player" controls hidden></audio>
+      <p class="hint">Микрофон доступен только на http://localhost или https://.</p>
+
+      <label style="margin-top:16px">📁 …или загрузить файл</label>
+      <input type="file" id="audioFile" accept=".mp3,.wav,.m4a,.webm,.ogg">
+    </div>
+  </div>
+
+  <button class="primary" id="goBtn">🛠️ Сформировать протокол</button>
+
+  <div id="status" class="hint" style="text-align:center;margin-top:10px"></div>
+  <div id="error" class="err" style="display:none;margin-top:14px"></div>
+
+  <div id="result" style="display:none">
+    <div class="card">
+      <label>Поручения</label>
+      <div id="tasks"></div>
+      <div style="margin-top:16px"><a class="dl" id="dlLink" href="#">⬇️ Скачать .docx</a></div>
+    </div>
+    <div class="card">
+      <label>🔍 Распознанный JSON</label>
+      <pre id="json"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Вкладки ───────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('pane-' + t.dataset.pane).classList.add('active');
+});
+
+// ── Запись с микрофона (MediaRecorder) ────────────────────────────────────
+let mediaRecorder, chunks = [], recordedBlob = null, timer, seconds = 0;
+const recBtn = document.getElementById('recBtn');
+const player = document.getElementById('player');
+const recTime = document.getElementById('recTime');
+
+recBtn.onclick = async () => {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    chunks = [];
+    mediaRecorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      recordedBlob = new Blob(chunks, { type: 'audio/webm' });
+      player.src = URL.createObjectURL(recordedBlob);
+      player.hidden = false;
+      stream.getTracks().forEach(t => t.stop());
+      clearInterval(timer);
+      recBtn.textContent = '● Записать заново';
+      recBtn.classList.remove('active');
+    };
+    mediaRecorder.start();
+    seconds = 0; recTime.textContent = '00:00';
+    timer = setInterval(() => {
+      seconds++;
+      const m = String(Math.floor(seconds/60)).padStart(2,'0');
+      const s = String(seconds%60).padStart(2,'0');
+      recTime.textContent = m + ':' + s;
+    }, 1000);
+    recBtn.textContent = '■ Остановить';
+    recBtn.classList.add('active');
+  } catch (e) {
+    alert('Не удалось получить доступ к микрофону: ' + e.message +
+          '\nОткройте приложение на http://localhost или https://.');
+  }
+};
+
+// ── Отправка на сервер ─────────────────────────────────────────────────────
+const goBtn = document.getElementById('goBtn');
+goBtn.onclick = async () => {
+  const text = document.getElementById('transcript').value.trim();
+  const file = document.getElementById('audioFile').files[0];
+
+  const fd = new FormData();
+  if (text) {
+    fd.append('transcript', text);
+  } else if (recordedBlob) {
+    fd.append('audio', recordedBlob, 'recording.webm');
+  } else if (file) {
+    fd.append('audio', file, file.name);
+  } else {
+    showError('Вставьте текст, запишите или загрузите аудио.');
+    return;
+  }
+
+  setBusy(true, 'Обработка… (транскрипция → извлечение → .docx)');
+  hideError();
+  try {
+    const resp = await fetch('/process', { method: 'POST', body: fd });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Ошибка сервера');
+    render(data);
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    setBusy(false, '');
+  }
+};
+
+function render(data) {
+  const p = data.protocol;
+  document.getElementById('json').textContent = JSON.stringify(p, null, 2);
+
+  const tasks = p['поручения'] || [];
+  let html = '';
+  if (tasks.length) {
+    html = '<table><tr><th>Задача</th><th>Ответственный</th><th>Срок</th><th>Приоритет</th></tr>';
+    tasks.forEach(t => {
+      html += `<tr><td>${esc(t['задача'])}</td><td>${esc(t['ответственный'])}</td>` +
+              `<td>${esc(t['срок'])}</td><td>${esc(t['приоритет'])}</td></tr>`;
+    });
+    html += '</table>';
+  } else {
+    html = '<p class="hint">Поручений не выявлено.</p>';
+  }
+  document.getElementById('tasks').innerHTML = html;
+  document.getElementById('dlLink').href = '/download/' + data.docx_id;
+  document.getElementById('result').style.display = 'block';
+}
+
+function esc(s){ return String(s ?? '').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function setBusy(b, msg){ goBtn.disabled = b; document.getElementById('status').textContent = msg; }
+function showError(m){ const e = document.getElementById('error'); e.textContent = '⚠️ ' + m; e.style.display = 'block'; }
+function hideError(){ document.getElementById('error').style.display = 'none'; }
+</script>
+</body>
+</html>

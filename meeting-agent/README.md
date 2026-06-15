@@ -41,6 +41,27 @@ python main.py --text transcript.txt --json
 python main.py --audio meeting.mp3
 ```
 
+## HTTP-веб-приложение (Flask, без Streamlit)
+
+Альтернатива Streamlit — обычный HTTP-сервер с одной HTML-страницей: запись с
+микрофона прямо в браузере (`MediaRecorder`), загрузка файла или вставка текста
+→ скачать `.docx`.
+
+```bash
+cd meeting-agent
+pip install -r requirements.txt
+export ANTHROPIC_API_KEY=sk-ant-...     # или положить в .env
+python server.py
+# открыть http://localhost:8000
+```
+
+Эндпоинты: `GET /` (UI), `POST /process` (текст/аудио → JSON + id .docx),
+`GET /download/<id>`, `POST /send` (Фаза 2), `GET /contacts`.
+
+> Запись с микрофона работает только в защищённом контексте браузера —
+> `http://localhost` или `https://`. На удалённом сервере по обычному `http`
+> микрофон недоступен (правило безопасности браузера, не зависит от фреймворка).
+
 ## Секреты
 
 Локально — `.streamlit/secrets.toml` (в `.gitignore`). На облаке — те же ключи

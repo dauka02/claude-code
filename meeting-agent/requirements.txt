@@ -1,4 +1,5 @@
 streamlit>=1.40        # >=1.40 нужен для записи аудио в браузере (st.audio_input)
+flask                  # для server.py — HTTP-веб-приложение (альтернатива Streamlit)
 anthropic
 python-docx
 requests
