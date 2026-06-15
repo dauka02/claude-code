@@ -1,0 +1,5 @@
+{
+  "Иванов": {"email": "ivanov@example.com", "telegram_id": "123456789"},
+  "Петрова": {"email": "petrova@example.com"},
+  "Сериков": {"telegram_id": "987654321"}
+}

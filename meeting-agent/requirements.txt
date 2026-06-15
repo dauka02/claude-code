@@ -1,0 +1,7 @@
+streamlit
+anthropic
+python-docx
+requests
+# openai не нужен: Whisper API вызывается напрямую через requests
+# faster-whisper      # только для локального режима whisper_local
+# python-telegram-bot не нужен: Telegram Bot API вызывается через requests
