@@ -1,4 +1,4 @@
-streamlit
+streamlit>=1.40        # >=1.40 нужен для записи аудио в браузере (st.audio_input)
 anthropic
 python-docx
 requests

@@ -41,6 +41,19 @@ with tab_text:
     )
 
 with tab_audio:
+    st.markdown("**🔴 Записать с микрофона**")
+    # Встроенный виджет записи аудио в браузере (Streamlit ≥ 1.40).
+    # Возвращает WAV-файл (file-like), который понимает transcribe().
+    recorded_audio = None
+    if hasattr(st, "audio_input"):
+        recorded_audio = st.audio_input("Нажмите кнопку микрофона и говорите")
+    else:
+        st.info(
+            "Запись с микрофона требует Streamlit ≥ 1.40. "
+            "Обновите пакет или воспользуйтесь загрузкой файла ниже."
+        )
+
+    st.markdown("**📁 …или загрузить файл**")
     audio_file = st.file_uploader(
         "Аудио встречи (mp3 / wav / m4a, до ~25 МБ)",
         type=["mp3", "wav", "m4a"],
@@ -53,10 +66,13 @@ if st.button("🛠️ Сформировать протокол", type="primary"
 
     try:
         with st.status("Обработка…", expanded=True) as status:
-            # 1. Транскрипция (если загружено аудио и нет текста).
-            if not transcript and audio_file is not None:
+            # 1. Транскрипция (если есть аудио и нет текста).
+            #    Приоритет — запись с микрофона, затем загруженный файл.
+            audio_source = recorded_audio or audio_file
+            if not transcript and audio_source is not None:
                 st.write("🎙️ Транскрибирую аудио…")
-                transcript = transcribe(audio_file, filename=audio_file.name)
+                source_name = getattr(audio_source, "name", "recording.wav")
+                transcript = transcribe(audio_source, filename=source_name)
 
             if not transcript:
                 status.update(label="Нет данных", state="error")
