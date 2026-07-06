@@ -84,6 +84,8 @@ scripts/fetch-assets.mjs — скачивание ассетов в public/asset
 
 ## Деплой на Vercel
 
-Import → Root Directory: `greenline-tour` → Framework: Vite. Build
-`npm run build`, output `dist/`. Чтобы в продакшене были Higgsfield-ассеты,
-выполните `npm run fetch-assets` до сборки (или закоммитьте `public/assets/`).
+Import репозитория → **Root Directory: `greenline-tour`** → Deploy.
+`vercel.json` уже настроен: фреймворк Vite, а перед сборкой Vercel сам
+выполняет `scripts/fetch-assets.mjs` и включает Higgsfield-текстуры и
+GLB-модели в продакшен (если CDN недоступен — соберётся на процедурных
+фолбэках, сборка не падает).
