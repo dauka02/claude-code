@@ -44,3 +44,18 @@
 | Стела | `3c7bf580` | https://d8j0ntlcm91z4.cloudfront.net/user_34oyBf1C2JQ9p77OPjDAeczkRHb/hf_20260706_072942_3c7bf580-6e41-4a74-9c56-8f8e1971d204.png |
 | Скамья | `3787d8a2` | https://d8j0ntlcm91z4.cloudfront.net/user_34oyBf1C2JQ9p77OPjDAeczkRHb/hf_20260706_072944_3787d8a2-dbe7-4c57-886b-3e0cd9b8f154.png |
 | Фонарь | `641d4ed6` | https://d8j0ntlcm91z4.cloudfront.net/user_34oyBf1C2JQ9p77OPjDAeczkRHb/hf_20260706_072946_641d4ed6-18ba-4a4b-a9f1-77af3be1cbac.png |
+
+## 2 очередь (v2, +8 генераций: 5 изображений + 3 GLB)
+
+| Файл | Job ID | URL |
+|---|---|---|
+| rock_concrete.png (арх. бетон «под скалу») | `64cf6a73` | https://d8j0ntlcm91z4.cloudfront.net/user_34oyBf1C2JQ9p77OPjDAeczkRHb/hf_20260707_044353_64cf6a73-64eb-4c9b-830d-9e0345bdf287.png |
+| tulips.png (тюльпановая клумба) | `b4572bb3` | https://d8j0ntlcm91z4.cloudfront.net/user_34oyBf1C2JQ9p77OPjDAeczkRHb/hf_20260707_044355_b4572bb3-c276-46ae-8b44-e1d0ee94580f.png |
+| pergola.glb (пергола, металл + ламели) | `dfe20441` | https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/195634dc-505e-4313-a93c-d5c8428bc245.glb |
+| tunnel_portal.glb (портал тоннеля) | `f88372a4` | https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/529cdb08-1611-46eb-acf3-92b8d3eb728b.glb |
+| stela_greenline.glb (стела GREEN LINE) | `3354dfd9` | https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a/c959a09a-2b1f-4665-b4e9-4d7a46267c81.glb |
+
+Исходные hero-изображения: пергола `12546ed0`, портал `408fac2d`, стела `ef20bc2b`
+(hf_20260707_0443xx_*.png на том же CDN). Итог по проекту: 28 генераций
+(2 неудачные из-за ложного NSFW-флага на гравии), переиспользование текстур
+через тайлинг/перекраску — в пределах лимита ТЗ (~20–25 полезных).

@@ -93,6 +93,44 @@ body,
   color: var(--green-dark);
 }
 
+.stage-select {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.stage-select button {
+  flex: 1;
+  font: inherit;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 2px solid #e2e8e2;
+  background: #fafcfa;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.stage-select button b {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 3px;
+}
+
+.stage-select button span {
+  font-size: 11.5px;
+  color: #5a6360;
+  line-height: 1.35;
+  display: block;
+}
+
+.stage-select button.active {
+  border-color: var(--green);
+  background: #eef7ee;
+}
+
 .btn-start {
   font: inherit;
   font-size: 16px;
@@ -237,43 +275,18 @@ body,
   z-index: 15;
 }
 
-.progress-track {
-  position: relative;
-  height: 10px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+.minimap {
+  display: block;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.35));
 }
 
-.progress-zone {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  opacity: 0.85;
-}
-
-.progress-poi {
-  position: absolute;
-  top: -2px;
-  width: 4px;
-  height: 14px;
-  margin-left: -2px;
-  border-radius: 2px;
-  background: #ffffff;
-  opacity: 0.8;
-}
-
-.progress-dot {
-  position: absolute;
-  top: 50%;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
-  border-radius: 50%;
-  background: #fff;
-  border: 3px solid var(--green);
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-  transition: left 0.2s linear;
+.fade {
+  position: fixed;
+  inset: 0;
+  background: #060a08;
+  z-index: 40;
+  pointer-events: none;
+  transition: opacity 0.12s linear;
 }
 
 .progress-label {

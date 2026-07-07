@@ -17,6 +17,8 @@ export const TEX = {
   facadeBrickNight: '/assets/textures/facade_brick_night.png',
   skyDay: '/assets/textures/sky_day.png',
   skyNight: '/assets/textures/sky_night.png',
+  rock: '/assets/textures/rock_concrete.png',
+  tulips: '/assets/textures/tulips.png',
 } as const
 
 type TexName = keyof typeof TEX
@@ -315,6 +317,62 @@ function drawSky(night: boolean): THREE.Texture {
 export const fallbackSkyDay = () => drawSky(false)
 export const fallbackSkyNight = () => drawSky(true)
 
+/** Арх. бетон «под скалу» — тоннели, водопады, каскады. */
+export function fallbackRock(): THREE.Texture {
+  srand(61)
+  return canvas(512, 512, (c, w, h) => {
+    c.fillStyle = '#7d7468'
+    c.fillRect(0, 0, w, h)
+    for (let i = 0; i < 260; i++) {
+      const v = 0.7 + rnd() * 0.55
+      c.fillStyle = `rgb(${(125 * v) | 0},${(116 * v) | 0},${(104 * v) | 0})`
+      c.beginPath()
+      const x = rnd() * w
+      const y = rnd() * h
+      c.moveTo(x, y)
+      for (let k = 0; k < 5; k++) c.lineTo(x + (rnd() - 0.5) * 90, y + (rnd() - 0.5) * 60)
+      c.closePath()
+      c.fill()
+    }
+    // трещины
+    c.strokeStyle = 'rgba(40,36,30,0.8)'
+    for (let i = 0; i < 60; i++) {
+      c.lineWidth = 1 + rnd() * 2.5
+      c.beginPath()
+      let x = rnd() * w
+      let y = rnd() * h
+      c.moveTo(x, y)
+      for (let k = 0; k < 6; k++) {
+        x += (rnd() - 0.5) * 70
+        y += (rnd() - 0.3) * 50
+        c.lineTo(x, y)
+      }
+      c.stroke()
+    }
+  })
+}
+
+/** Тюльпановая клумба (top-down). */
+export function fallbackTulips(): THREE.Texture {
+  srand(71)
+  return canvas(512, 512, (c, w, h) => {
+    c.fillStyle = '#3f6a2e'
+    c.fillRect(0, 0, w, h)
+    for (let i = 0; i < 2200; i++) {
+      c.fillStyle = `rgba(${50 + rnd() * 50},${100 + rnd() * 60},${35 + rnd() * 40},0.9)`
+      c.fillRect(rnd() * w, rnd() * h, 3, 5)
+    }
+    const colors = ['#d8383c', '#e8595f', '#e8c93a', '#c94fc0', '#e88337', '#f0f0e8']
+    for (let i = 0; i < 800; i++) {
+      c.fillStyle = colors[Math.floor(rnd() * colors.length)]
+      const r = 3.5 + rnd() * 3
+      c.beginPath()
+      c.arc(rnd() * w, rnd() * h, r, 0, Math.PI * 2)
+      c.fill()
+    }
+  })
+}
+
 /* ------------------------------------------------------------------ */
 /* Purely procedural textures (no generated counterpart)               */
 /* ------------------------------------------------------------------ */
@@ -466,6 +524,63 @@ export function makeWaterNormalTexture(): THREE.CanvasTexture {
   }) as THREE.CanvasTexture
   t.wrapS = t.wrapT = THREE.RepeatWrapping
   t.colorSpace = THREE.NoColorSpace
+  return t
+}
+
+/** Оранжевое резиновое покрытие беговых/вело дорожек. */
+export function makeTrackTexture(base: string, dark: string): THREE.CanvasTexture {
+  srand(83)
+  const t = canvas(128, 128, (c, s) => {
+    c.fillStyle = base
+    c.fillRect(0, 0, s, s)
+    for (let i = 0; i < 900; i++) {
+      c.fillStyle = rnd() < 0.5 ? dark : 'rgba(255,255,255,0.08)'
+      c.fillRect(rnd() * s, rnd() * s, 1.5, 1.5)
+    }
+  }) as THREE.CanvasTexture
+  return configure(t, true) as THREE.CanvasTexture
+}
+
+/** Тёмный кирпич (круглые скамьи, кольцо стелы). */
+export function makeBrickTexture(): THREE.CanvasTexture {
+  srand(91)
+  const t = canvas(256, 256, (c, s) => {
+    c.fillStyle = '#4a3a34'
+    c.fillRect(0, 0, s, s)
+    const rows = 10
+    for (let r = 0; r < rows; r++) {
+      const y0 = (r * s) / rows
+      let x = r % 2 ? -14 : 0
+      while (x < s + 14) {
+        const bw = 26 + rnd() * 8
+        const v = 0.8 + rnd() * 0.4
+        c.fillStyle = `rgb(${(96 * v) | 0},${(72 * v) | 0},${(62 * v) | 0})`
+        c.fillRect(x + 1.5, y0 + 1.5, bw - 3, s / rows - 3)
+        x += bw
+      }
+    }
+  }) as THREE.CanvasTexture
+  return configure(t, true) as THREE.CanvasTexture
+}
+
+/** Диск-панно GREENLINE с рассветным градиентом. */
+export function makeDiscPanelTexture(): THREE.CanvasTexture {
+  const t = canvas(256, 256, (c, s) => {
+    const g = c.createLinearGradient(0, s * 0.15, 0, s * 0.9)
+    g.addColorStop(0, '#f6d76a')
+    g.addColorStop(0.45, '#f2925a')
+    g.addColorStop(0.75, '#c96a9a')
+    g.addColorStop(1, '#7a5aa8')
+    c.fillStyle = g
+    c.beginPath()
+    c.arc(s / 2, s / 2, s * 0.47, 0, Math.PI * 2)
+    c.fill()
+    c.fillStyle = 'rgba(255,255,255,0.92)'
+    c.font = 'bold 26px Inter, sans-serif'
+    c.textAlign = 'center'
+    c.fillText('GREENLINE', s / 2, s * 0.82)
+  }) as THREE.CanvasTexture
+  t.colorSpace = THREE.SRGBColorSpace
   return t
 }
 

@@ -30,6 +30,12 @@ const ASSETS = {
   'public/assets/models/stela.glb': `${GLB}/61d33dc4-c2d6-4772-8ccd-c7a4f373a9d0.glb`,
   'public/assets/models/bench_angular.glb': `${GLB}/19edf837-a468-4718-acf9-cbcc06a8fffb.glb`,
   'public/assets/models/lamp.glb': `${GLB}/0d891b38-bb5e-4f03-ab13-6b95344e4785.glb`,
+  // ---- 2 очередь ----
+  'public/assets/textures/rock_concrete.png': `${IMG}/hf_20260707_044353_64cf6a73-64eb-4c9b-830d-9e0345bdf287.png`,
+  'public/assets/textures/tulips.png': `${IMG}/hf_20260707_044355_b4572bb3-c276-46ae-8b44-e1d0ee94580f.png`,
+  'public/assets/models/pergola.glb': `${GLB}/195634dc-505e-4313-a93c-d5c8428bc245.glb`,
+  'public/assets/models/tunnel_portal.glb': `${GLB}/529cdb08-1611-46eb-acf3-92b8d3eb728b.glb`,
+  'public/assets/models/stela_greenline.glb': `${GLB}/c959a09a-2b1f-4665-b4e9-4d7a46267c81.glb`,
 }
 
 let ok = 0

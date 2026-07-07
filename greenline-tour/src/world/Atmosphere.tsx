@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { fallbackSkyDay, fallbackSkyNight, TEX } from './textures'
 import { playerPos, useTour } from '../store'
 import { lampPositions } from './Props'
+import { SEGMENTS } from '../data/geometry'
 
 const DAY_FOG = new THREE.Color('#cdd8de')
 const NIGHT_FOG = new THREE.Color('#0b111e')
@@ -67,7 +68,9 @@ export function SkyAndFog() {
     if (nightRef.current)
       nightRef.current.opacity = THREE.MathUtils.lerp(nightRef.current.opacity, targetOpacity, k)
     fog.color.lerp(night ? NIGHT_FOG : DAY_FOG, k)
-    fog.density = THREE.MathUtils.lerp(fog.density, night ? 0.0072 : 0.0055, k)
+    // на высоте (fly-режим, аэровиды) дымка ослабевает
+    const alt = THREE.MathUtils.clamp(1 - (playerPos.y - 25) / 140, 0.22, 1)
+    fog.density = THREE.MathUtils.lerp(fog.density, (night ? 0.0072 : 0.0055) * alt, k)
   })
 
   return (
@@ -95,11 +98,12 @@ export function SkyAndFog() {
 export function Lights() {
   const night = useTour((s) => s.night)
   const quality = useTour((s) => s.quality)
+  const stage = useTour((s) => s.stage)
   const sunRef = useRef<THREE.DirectionalLight>(null!)
   const hemiRef = useRef<THREE.HemisphereLight>(null!)
   const moonRef = useRef<THREE.DirectionalLight>(null!)
   const lampLights = useRef<THREE.PointLight[]>([])
-  const lamps = useMemo(lampPositions, [])
+  const lamps = useMemo(() => lampPositions(SEGMENTS[stage]), [stage])
 
   useFrame((_, delta) => {
     const k = Math.min(1, delta * 1.5)
@@ -107,7 +111,7 @@ export function Lights() {
     if (sun) {
       sun.intensity = THREE.MathUtils.lerp(sun.intensity, night ? 0 : 2.6, k)
       // sun follows player so the tight shadow camera stays useful
-      sun.position.set(playerPos.x + 40, 55, playerPos.z - 30)
+      sun.position.set(playerPos.x + 34, 78, playerPos.z - 26)
       sun.target.position.set(playerPos.x, 0, playerPos.z)
       sun.target.updateMatrixWorld()
     }

@@ -2,25 +2,13 @@ import * as THREE from 'three'
 import { useMemo } from 'react'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import {
-  COURT,
-  HALF_W,
-  LENGTH,
-  PATH_CURVE,
-  RUBBER,
-  SWALES,
+  SEGMENTS,
   heightAt,
-  pathXAt,
+  promAt,
   rng,
-} from './constants'
-import {
-  blobGeometry,
-  blobPoints,
-  offsetPolyline,
-  ribbonGeometry,
-  samplePath,
-  wallGeometry,
-  type Pt,
-} from './geometry'
+  type SegModel,
+} from '../data/geometry'
+import { blobGeometry, blobPoints, offsetPolyline, ribbonGeometry, wallGeometry, type Pt } from './geometry'
 import {
   fallbackGravel,
   fallbackGrass,
@@ -28,35 +16,43 @@ import {
   fallbackStone,
   makeCourtTexture,
   makeRubberTexture,
+  makeTrackTexture,
   makeWoodTexture,
   useTexOrFallback,
 } from './textures'
 
-const yAt = (x: number, z: number) => heightAt(x, z)
+/* ------------------------------ terrain ------------------------------ */
 
-/** Terrain: displaced plane covering the green boulevard strip. */
-function Terrain() {
-  const grass = useTexOrFallback('grass', fallbackGrass, [64, 170])
+function Terrain({ seg }: { seg: SegModel }) {
+  const grass = useTexOrFallback('grass', fallbackGrass, [seg.lengthM / 12, 18])
   const geo = useMemo(() => {
-    const g = new THREE.PlaneGeometry(HALF_W * 2 + 10, LENGTH + 120, 100, 340)
-    g.rotateX(-Math.PI / 2)
-    g.translate(0, 0, LENGTH / 2 + 10)
+    const parts: THREE.BufferGeometry[] = []
+    const strip = new THREE.PlaneGeometry(seg.lengthM + 90, seg.halfW * 2 + 12, Math.round(seg.lengthM / 4), 30)
+    strip.rotateX(-Math.PI / 2)
+    strip.translate(seg.lengthM / 2, 0, 0)
+    parts.push(strip)
+    if (seg.branch) {
+      const last = seg.branch.pts[seg.branch.pts.length - 1]
+      const bLen = last.z - 25
+      const b = new THREE.PlaneGeometry(90, bLen + 60, 24, Math.round(bLen / 4))
+      b.rotateX(-Math.PI / 2)
+      b.translate(seg.branch.pts[Math.floor(seg.branch.pts.length / 2)].x, 0, 25 + bLen / 2 + 15)
+      parts.push(b)
+    }
+    const g = mergeGeometries(parts, false)!
     const p = g.attributes.position
     const colors = new Float32Array(p.count * 3)
     const c = new THREE.Color()
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i)
       const z = p.getZ(i)
-      p.setY(i, heightAt(x, z))
-      // darken sunken beds, warm up dry patches
-      const swale = SWALES.some((s) => {
-        const dx = (x - s.x) / s.rx
-        const dz = (z - s.z) / s.rz
-        return dx * dx + dz * dz < 1.4
-      })
+      p.setY(i, heightAt(seg, x, z))
       const t = 0.85 + 0.3 * Math.sin(x * 0.8 + z * 0.53) * Math.sin(z * 0.31)
       c.setRGB(0.95 * t, 1.0 * t, 0.9 * t)
-      if (swale) c.multiplyScalar(0.72)
+      // ярче на лужайках
+      for (const l of seg.lawns) {
+        if (Math.hypot(x - l.cx, z - l.cz) < l.r) c.setRGB(0.62 * t, 1.15 * t, 0.55 * t)
+      }
       colors[i * 3] = c.r
       colors[i * 3 + 1] = c.g
       colors[i * 3 + 2] = c.b
@@ -64,7 +60,7 @@ function Terrain() {
     g.setAttribute('color', new THREE.BufferAttribute(colors, 3))
     g.computeVertexNormals()
     return g
-  }, [])
+  }, [seg])
   return (
     <mesh geometry={geo} receiveShadow>
       <meshStandardMaterial map={grass} vertexColors roughness={1} metalness={0} />
@@ -72,36 +68,42 @@ function Terrain() {
   )
 }
 
-/** Streets, parking lanes and sidewalks flanking the boulevard. */
-function Streets() {
+/* ------------------------- streets & crossings ------------------------ */
+
+function Streets({ seg }: { seg: SegModel }) {
   const geo = useMemo(() => {
     const parts: THREE.BufferGeometry[] = []
-    const mk = (x0: number, x1: number, y: number) => {
-      const g = new THREE.PlaneGeometry(x1 - x0, LENGTH + 120)
+    const mk = (w: number, l: number, x: number, z: number, y = -0.02) => {
+      const g = new THREE.PlaneGeometry(w, l)
       g.rotateX(-Math.PI / 2)
-      g.translate((x0 + x1) / 2, y, LENGTH / 2 + 10)
-      return g
-    }
-    for (const side of [-1, 1]) {
-      parts.push(mk(side * HALF_W, side * (HALF_W + 3), 0.0)) // parking lane
-      parts.push(mk(side * (HALF_W + 3), side * (HALF_W + 12), -0.02)) // street
-      parts.push(mk(side * (HALF_W + 12), side * (HALF_W + 60), 0.05)) // sidewalk + building ground
-    }
-    // end streets (crosswalk zones)
-    for (const zEnd of [-14, LENGTH + 14]) {
-      const g = new THREE.PlaneGeometry(HALF_W * 2 + 120, 16)
-      g.rotateX(-Math.PI / 2)
-      g.translate(0, -0.02, zEnd)
+      g.translate(x, y, z)
       parts.push(g)
     }
+    // фланговые улицы вдоль полосы
+    for (const side of [-1, 1]) {
+      mk(seg.lengthM + 90, 3, seg.lengthM / 2, side * (seg.halfW + 1.5), 0) // parking lane
+      mk(seg.lengthM + 90, 9, seg.lengthM / 2, side * (seg.halfW + 7.5)) // roadway
+      mk(seg.lengthM + 90, 46, seg.lengthM / 2, side * (seg.halfW + 35), 0.05) // sidewalk + ground
+    }
+    // торцевые улицы
+    for (const c of seg.crossings) {
+      if (c.street) continue
+      mk(16, seg.halfW * 2 + 110, c.x < seg.lengthM / 2 ? c.x - 6 : c.x + 6, 0)
+    }
+    // пересечение Айтеке би (s1) + фланги рукава
+    if (seg.branch) {
+      const cross = seg.crossings.find((c) => c.street)
+      if (cross) mk(14, seg.halfW * 2 + 8, cross.x + 10, 0)
+      const bPts = seg.branch.pts
+      const last = bPts[bPts.length - 1]
+      for (const side of [-1, 1]) {
+        // упрощённо: прямые фланги вдоль рукава
+        const midX = bPts[Math.floor(bPts.length / 2)].x
+        mk(8, last.z - 20, midX + side * 38, (last.z + 25) / 2, -0.02)
+      }
+    }
     return mergeGeometries(parts, false)!
-  }, [])
-  const colors = useMemo(() => {
-    // vertex colors: darker asphalt vs lighter sidewalk handled by two materials is
-    // overkill — single dim material reads fine at distance
-    return null
-  }, [])
-  void colors
+  }, [seg])
   return (
     <mesh geometry={geo} receiveShadow>
       <meshStandardMaterial color="#5a5c5e" roughness={0.95} metalness={0} />
@@ -109,20 +111,26 @@ function Streets() {
   )
 }
 
-/** Zebra crosswalks connecting boulevard ends to the far sidewalks. */
-function Crosswalks() {
+function Crosswalks({ seg }: { seg: SegModel }) {
   const geo = useMemo(() => {
     const parts: THREE.BufferGeometry[] = []
-    for (const zEnd of [-9, LENGTH + 9]) {
+    for (const c of seg.crossings) {
+      const at = promAt(seg, THREE.MathUtils.clamp(c.x, 0, seg.lengthM))
       for (let i = -3; i <= 3; i++) {
         const g = new THREE.PlaneGeometry(2.2, 0.9)
         g.rotateX(-Math.PI / 2)
-        g.translate(pathXAt(zEnd < 0 ? 0 : LENGTH) + i * 1.8, 0.0, zEnd)
+        if (c.street) {
+          g.rotateY(Math.PI / 2)
+          g.translate(c.x + 10 + i * 1.8, 0.02, at.z)
+        } else {
+          g.translate(at.x + i * 1.8, 0.02, at.z)
+          g.translate(c.x < 0 ? c.x - at.x + 2 : c.x - at.x - 2, 0, 0)
+        }
         parts.push(g)
       }
     }
     return mergeGeometries(parts, false)!
-  }, [])
+  }, [seg])
   return (
     <mesh geometry={geo}>
       <meshStandardMaterial color="#cfd2d4" roughness={0.9} />
@@ -130,27 +138,32 @@ function Crosswalks() {
   )
 }
 
-/** Main serpentine paved path, entrance & exit plazas. */
-function MainPath() {
+/* ------------------------------- paths -------------------------------- */
+
+function yOf(seg: SegModel) {
+  return (x: number, z: number) => heightAt(seg, x, z)
+}
+
+function PavedPaths({ seg }: { seg: SegModel }) {
   const paving = useTexOrFallback('paving', fallbackPaving, [1, 1])
   const geo = useMemo(() => {
-    const pts = samplePath(PATH_CURVE, 360)
-    const path = ribbonGeometry(pts, 4, yAt, 5.2)
-    // entrance plaza 0..16 m, exit plaza
-    const inPlaza = new THREE.CircleGeometry(13, 40)
-    inPlaza.rotateX(-Math.PI / 2)
-    inPlaza.translate(pathXAt(4), 0.025, 6)
-    const outPlaza = new THREE.CircleGeometry(11, 40)
-    outPlaza.rotateX(-Math.PI / 2)
-    outPlaza.translate(pathXAt(LENGTH - 4), 0.025, LENGTH - 5)
-    // plaza UVs in world space so pattern scale matches path
-    for (const plaza of [inPlaza, outPlaza]) {
-      const p = plaza.attributes.position
-      const uv = plaza.attributes.uv
-      for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 5.2, p.getZ(i) / 5.2)
+    const parts: THREE.BufferGeometry[] = []
+    for (const p of seg.paths) {
+      if (p.kind !== 'promenade' && p.kind !== 'loop' && p.kind !== 'branch') continue
+      parts.push(ribbonGeometry(p.pts, p.width, yOf(seg), 5.2))
     }
-    return mergeGeometries([path, inPlaza, outPlaza], false)!
-  }, [])
+    // площади
+    for (const pl of seg.plazas) {
+      const disc = new THREE.CircleGeometry(pl.r, 48)
+      disc.rotateX(-Math.PI / 2)
+      disc.translate(pl.cx, 0.028, pl.cz)
+      const pos = disc.attributes.position
+      const uv = disc.attributes.uv
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / 5.2, pos.getZ(i) / 5.2)
+      parts.push(disc)
+    }
+    return mergeGeometries(parts, false)!
+  }, [seg])
   return (
     <mesh geometry={geo} receiveShadow>
       <meshStandardMaterial map={paving} roughness={0.85} metalness={0.02} />
@@ -158,68 +171,104 @@ function MainPath() {
   )
 }
 
-/** Secondary gravel paths branching off the main path. */
-function GravelPaths() {
+/** Кольцо с крестом на центральной площади (рисунок мощения из генплана). */
+function PlazaRing({ seg }: { seg: SegModel }) {
+  const ring = seg.plazas.find((p) => p.ring)
+  const geo = useMemo(() => {
+    if (!ring) return null
+    const parts: THREE.BufferGeometry[] = []
+    const mkRing = (r0: number, r1: number) => {
+      const g = new THREE.RingGeometry(r0, r1, 64)
+      g.rotateX(-Math.PI / 2)
+      g.translate(ring.cx, 0.045, ring.cz)
+      parts.push(g)
+    }
+    mkRing(ring.r * 0.55, ring.r * 0.62)
+    mkRing(ring.r * 0.92, ring.r * 0.99)
+    for (let k = 0; k < 4; k++) {
+      const g = new THREE.PlaneGeometry(ring.r * 0.36, 1.4)
+      g.rotateX(-Math.PI / 2)
+      g.rotateY((k * Math.PI) / 2 + Math.PI / 4)
+      const dx = Math.cos((k * Math.PI) / 2 + Math.PI / 4) * ring.r * 0.77
+      const dz = Math.sin((k * Math.PI) / 2 + Math.PI / 4) * ring.r * 0.77
+      g.translate(ring.cx + dx, 0.045, ring.cz + dz)
+      parts.push(g)
+    }
+    return mergeGeometries(parts, false)!
+  }, [ring])
+  if (!geo) return null
+  return (
+    <mesh geometry={geo}>
+      <meshStandardMaterial color="#8b8378" roughness={0.9} />
+    </mesh>
+  )
+}
+
+function Tracks({ seg }: { seg: SegModel }) {
+  const bikeTex = useMemo(() => makeTrackTexture('#a5402a', 'rgba(60,20,12,0.35)'), [])
+  const runTex = useMemo(() => makeTrackTexture('#d06a2f', 'rgba(120,45,15,0.35)'), [])
+  const bike = useMemo(() => {
+    const parts = seg.paths.filter((p) => p.kind === 'bike').map((p) => ribbonGeometry(p.pts, p.width, yOf(seg), 2, 0.026))
+    return parts.length ? mergeGeometries(parts, false)! : null
+  }, [seg])
+  const run = useMemo(() => {
+    const parts = seg.paths.filter((p) => p.kind === 'run').map((p) => ribbonGeometry(p.pts, p.width, yOf(seg), 2, 0.026))
+    return parts.length ? mergeGeometries(parts, false)! : null
+  }, [seg])
+  return (
+    <group>
+      {bike && (
+        <mesh geometry={bike} receiveShadow>
+          <meshStandardMaterial map={bikeTex} roughness={0.95} />
+        </mesh>
+      )}
+      {run && (
+        <mesh geometry={run} receiveShadow>
+          <meshStandardMaterial map={runTex} roughness={0.95} />
+        </mesh>
+      )}
+    </group>
+  )
+}
+
+/** Гравийные тропинки-связки от променада к боковым тротуарам и павильонам. */
+function GravelPaths({ seg }: { seg: SegModel }) {
   const gravel = useTexOrFallback('gravel', fallbackGravel, [1, 1])
   const geo = useMemo(() => {
-    const mk = (waypoints: [number, number][]) => {
-      const curve = new THREE.CatmullRomCurve3(
-        waypoints.map(([x, z]) => new THREE.Vector3(x, 0, z)),
-      )
-      return ribbonGeometry(samplePath(curve, 60), 1.8, yAt, 3, 0.025)
+    const rand = rng(919 + seg.lengthM)
+    const parts: THREE.BufferGeometry[] = []
+    const mk = (a: Pt, b: Pt, wob = 3) => {
+      const mid = { x: (a.x + b.x) / 2 + (rand() - 0.5) * wob * 2, z: (a.z + b.z) / 2 + (rand() - 0.5) * wob }
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(a.x, 0, a.z),
+        new THREE.Vector3(mid.x, 0, mid.z),
+        new THREE.Vector3(b.x, 0, b.z),
+      ])
+      const pts = curve.getSpacedPoints(24).map((p) => ({ x: p.x, z: p.z }))
+      parts.push(ribbonGeometry(pts, 1.7, yOf(seg), 3, 0.024))
     }
-    const parts = [
-      // rain garden loop connectors
-      mk([
-        [pathXAt(95), 95],
-        [-8, 100],
-        [-16, 112],
-        [-19, 135],
-        [-12, 150],
-        [pathXAt(158), 158],
-      ]),
-      mk([
-        [pathXAt(120), 120],
-        [10, 128],
-        [18, 145],
-        [19, 170],
-        [10, 188],
-        [pathXAt(196), 196],
-      ]),
-      // pond overlook
-      mk([
-        [pathXAt(240), 240],
-        [-6, 248],
-        [-2, 262],
-        [pathXAt(272), 272],
-      ]),
-      // to sport court
-      mk([
-        [pathXAt(538), 538],
-        [4, 545],
-        [COURT.x - 10, COURT.z - 6],
-        [COURT.x - 9.5, COURT.z + 6],
-        [pathXAt(585), 582],
-      ]),
-      // quiet zone winding path
-      mk([
-        [pathXAt(628), 628],
-        [6, 638],
-        [12, 655],
-        [8, 672],
-        [-1, 685],
-        [pathXAt(700), 700],
-      ]),
-      mk([
-        [pathXAt(645), 645],
-        [-10, 652],
-        [-15, 668],
-        [-10, 684],
-        [pathXAt(694), 694],
-      ]),
-    ]
+    // связки к боковым тротуарам
+    const step = 68
+    for (let m = step; m < seg.lengthM - 30; m += step) {
+      const a = promAt(seg, m)
+      const side = m % (step * 2) < step ? -1 : 1
+      mk(a, { x: a.x + (rand() - 0.5) * 16, z: side * (seg.halfW - 1) })
+    }
+    // тропинки к павильонам
+    for (const [px, pz] of seg.pavilions) {
+      let best = seg.promenade.pts[0]
+      let bd = Infinity
+      for (const p of seg.promenade.pts) {
+        const d = Math.hypot(p.x - px, p.z - pz)
+        if (d < bd) {
+          bd = d
+          best = p
+        }
+      }
+      mk(best, { x: px, z: pz }, 1.5)
+    }
     return mergeGeometries(parts, false)!
-  }, [])
+  }, [seg])
   return (
     <mesh geometry={geo} receiveShadow>
       <meshStandardMaterial map={gravel} roughness={1} metalness={0} />
@@ -227,48 +276,48 @@ function GravelPaths() {
   )
 }
 
-/**
- * Retaining walls: type 1 — 48 short segments (~695.9 m total),
- * type 2 — 4 long segments (136 m). Some carry wooden bench tops (Props).
- */
-export function useWallSegments() {
+/* --------------------- подпорные стены (1 очередь) --------------------- */
+
+export function useWallSegments(seg: SegModel) {
   return useMemo(() => {
+    if (seg.id !== 's1') return []
     const rand = rng(4242)
-    const pts = samplePath(PATH_CURVE, 360) // ~2.08 m step
+    const pts = seg.promenade.pts
     const segs: { pts: Pt[]; type: 1 | 2; side: number }[] = []
-    const step = pts.length / 60
-    let cursor = 4
+    let cursor = 6
     let count1 = 0
-    const type2At = [8, 22, 38, 52] // indices in units of `step`
+    const type2At = [7, 21, 36, 50]
     let unit = 0
-    while (cursor < pts.length - 12 && count1 + type2At.length <= 52) {
+    while (cursor < pts.length - 14 && count1 + 4 <= 52) {
       const isType2 = type2At.includes(unit) && segs.filter((s) => s.type === 2).length < 4
-      const segLen = isType2 ? 16 : 5 + Math.floor(rand() * 4) // in samples (~2m each)
+      const segLen = isType2 ? 17 : 5 + Math.floor(rand() * 4)
       const side = rand() > 0.5 ? 1 : -1
       const start = Math.floor(cursor)
       const end = Math.min(pts.length - 1, start + segLen)
       const center = pts.slice(start, end)
       if (center.length > 2) {
-        const off = offsetPolyline(center, side * (2.6 + rand() * 0.8))
+        const off = offsetPolyline(center, side * (2.8 + rand() * 0.8))
         segs.push({ pts: off, type: isType2 ? 2 : 1, side })
         if (!isType2) count1++
       }
-      cursor += segLen + 2 + rand() * step * 0.5
+      cursor += segLen + 2 + rand() * 3
       unit++
     }
     return segs
-  }, [])
+  }, [seg])
 }
 
-function RetainingWalls() {
+function RetainingWalls({ seg }: { seg: SegModel }) {
   const stone = useTexOrFallback('stone', fallbackStone, [1, 1])
-  const segs = useWallSegments()
+  const segs = useWallSegments(seg)
   const geo = useMemo(() => {
+    if (!segs.length) return null
     const parts = segs.map((s) =>
-      wallGeometry(s.pts, s.type === 2 ? 0.55 : 0.4, s.type === 2 ? 0.6 : 0.45, yAt, 2.2),
+      wallGeometry(s.pts, s.type === 2 ? 0.55 : 0.4, s.type === 2 ? 0.6 : 0.45, yOf(seg), 2.2),
     )
     return mergeGeometries(parts, false)!
-  }, [segs])
+  }, [segs, seg])
+  if (!geo) return null
   return (
     <mesh geometry={geo} castShadow receiveShadow>
       <meshStandardMaterial map={stone} roughness={0.9} metalness={0} />
@@ -276,91 +325,103 @@ function RetainingWalls() {
   )
 }
 
-/** Wooden boardwalk zig-zagging over the rain-garden swales. */
-function Boardwalk() {
+/* ----------------------- мостки над дождевыми садами ------------------- */
+
+function Boardwalk({ seg }: { seg: SegModel }) {
   const wood = useMemo(() => makeWoodTexture(), [])
-  const { deck, posts } = useMemo(() => {
-    const way: [number, number][] = [
-      [pathXAt(88) - 3, 88],
-      [-13, 98],
-      [-15, 112],
-      [-9, 122],
-      [4, 130],
-      [13, 140],
-      [16, 152],
-      [10, 163],
-      [-4, 172],
-      [-14, 182],
-      [-15, 196],
-      [-8, 206],
-      [pathXAt(214), 214],
-    ]
-    const curve = new THREE.CatmullRomCurve3(way.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'catmullrom', 0.1)
-    const pts = samplePath(curve, 140)
-    const yDeck = (x: number, z: number) => Math.max(heightAt(x, z), -0.05) + 0.32
+  const data = useMemo(() => {
+    if (!seg.swales.length) return null
+    const rand = rng(77)
+    const way: THREE.Vector3[] = []
+    const sw = [...seg.swales].sort((a, b) => a.cx - b.cx)
+    const first = sw[0]
+    way.push(new THREE.Vector3(first.cx - first.rx - 6, 0, first.cz * 0.4))
+    for (const s of sw) {
+      way.push(new THREE.Vector3(s.cx - s.rx * 0.4, 0, s.cz + (rand() - 0.5) * 3))
+      way.push(new THREE.Vector3(s.cx + s.rx * 0.5, 0, s.cz * 0.75))
+    }
+    const last = sw[sw.length - 1]
+    way.push(new THREE.Vector3(last.cx + last.rx + 6, 0, last.cz * 0.3))
+    const curve = new THREE.CatmullRomCurve3(way, false, 'catmullrom', 0.15)
+    const pts = curve.getSpacedPoints(110).map((p) => ({ x: p.x, z: p.z }))
+    const yDeck = (x: number, z: number) => Math.max(heightAt(seg, x, z), -0.05) + 0.32
     const deckGeo = ribbonGeometry(pts, 1.7, yDeck, 0.9, 0)
-    // support posts
     const postParts: THREE.BufferGeometry[] = []
     for (let i = 4; i < pts.length - 4; i += 7) {
       for (const off of [-0.7, 0.7]) {
         const o = offsetPolyline(pts.slice(i, i + 2), off)[0]
         const top = yDeck(o.x, o.z)
-        const g = new THREE.CylinderGeometry(0.06, 0.06, top - heightAt(o.x, o.z) + 0.55, 6)
-        g.translate(o.x, top - (top - heightAt(o.x, o.z) + 0.55) / 2, o.z)
+        const g = new THREE.CylinderGeometry(0.06, 0.06, top - heightAt(seg, o.x, o.z) + 0.55, 6)
+        g.translate(o.x, top - (top - heightAt(seg, o.x, o.z) + 0.55) / 2, o.z)
         postParts.push(g)
       }
     }
     return { deck: deckGeo, posts: mergeGeometries(postParts, false)! }
-  }, [])
+  }, [seg])
+  if (!data) return null
   return (
     <group>
-      <mesh geometry={deck} castShadow receiveShadow>
+      <mesh geometry={data.deck} castShadow receiveShadow>
         <meshStandardMaterial map={wood} roughness={0.8} />
       </mesh>
-      <mesh geometry={posts} castShadow>
+      <mesh geometry={data.posts} castShadow>
         <meshStandardMaterial color="#6b5236" roughness={0.9} />
       </mesh>
     </group>
   )
 }
 
-/** Blue-teal rubber play surface (organic blob) + court slab. */
-function SportPlaySurfaces() {
-  const rubber = useMemo(() => makeRubberTexture(), [])
-  const court = useMemo(() => makeCourtTexture(), [])
+/* -------------------- покрытия: резина, корт, площадки ------------------ */
+
+function PlaySurfaces({ seg }: { seg: SegModel }) {
+  const rubberTex = useMemo(() => makeRubberTexture(), [])
+  const courtTex = useMemo(() => makeCourtTexture(), [])
   const rubberGeo = useMemo(() => {
-    const pts = blobPoints(RUBBER.x, RUBBER.z, RUBBER.rx, RUBBER.rz, 0.2, 0.22, 3)
-    const g = blobGeometry(pts, 0, 7)
-    // conform to terrain
-    const p = g.attributes.position
-    for (let i = 0; i < p.count; i++) p.setY(i, heightAt(p.getX(i), p.getZ(i)) + 0.04)
-    g.computeVertexNormals()
-    return g
-  }, [])
+    const parts: THREE.BufferGeometry[] = []
+    const blobs: { cx: number; cz: number; rx: number; rz: number; seed: number }[] = []
+    if (seg.rubber) blobs.push({ cx: seg.rubber.cx, cz: seg.rubber.cz, rx: seg.rubber.rx, rz: seg.rubber.rz, seed: 3 })
+    seg.playgrounds.forEach((p, i) => blobs.push({ cx: p.cx, cz: p.cz, rx: p.rx, rz: p.rz, seed: 5 + i }))
+    for (const b of blobs) {
+      const pts = blobPoints(b.cx, b.cz, b.rx, b.rz, 0.2, 0.2, b.seed)
+      const g = blobGeometry(pts, 0, 7)
+      const p = g.attributes.position
+      for (let i = 0; i < p.count; i++) p.setY(i, heightAt(seg, p.getX(i), p.getZ(i)) + 0.04)
+      g.computeVertexNormals()
+      parts.push(g)
+    }
+    return parts.length ? mergeGeometries(parts, false)! : null
+  }, [seg])
   return (
     <group>
-      <mesh geometry={rubberGeo} receiveShadow>
-        <meshStandardMaterial map={rubber} roughness={0.95} />
-      </mesh>
-      <mesh position={[COURT.x, 0.03, COURT.z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[COURT.w, COURT.l]} />
-        <meshStandardMaterial map={court} roughness={0.92} />
-      </mesh>
+      {rubberGeo && (
+        <mesh geometry={rubberGeo} receiveShadow>
+          <meshStandardMaterial map={rubberTex} roughness={0.95} />
+        </mesh>
+      )}
+      {seg.court && (
+        <mesh position={[seg.court.x, 0.03, seg.court.z]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+          <planeGeometry args={[seg.court.w, seg.court.l]} />
+          <meshStandardMaterial map={courtTex} roughness={0.92} />
+        </mesh>
+      )}
     </group>
   )
 }
 
-export default function Boulevard() {
+export default function Boulevard({ segId }: { segId: keyof typeof SEGMENTS }) {
+  const seg = SEGMENTS[segId]
   return (
     <group>
-      <Terrain />
-      <Streets />
-      <Crosswalks />
-      <MainPath />
-      <GravelPaths />
-      <RetainingWalls />
-      <Boardwalk />
-      <SportPlaySurfaces />
+      <Terrain seg={seg} />
+      <Streets seg={seg} />
+      <Crosswalks seg={seg} />
+      <PavedPaths seg={seg} />
+      <PlazaRing seg={seg} />
+      <Tracks seg={seg} />
+      <GravelPaths seg={seg} />
+      <RetainingWalls seg={seg} />
+      <Boardwalk seg={seg} />
+      <PlaySurfaces seg={seg} />
     </group>
   )
 }

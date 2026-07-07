@@ -3,35 +3,32 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import {
-  LENGTH,
-  PONDS,
-  SWALES,
+  SEGMENTS,
   heightAt,
   inSwale,
   isPlantable,
   rng,
-} from './constants'
-import { makeBirchTexture } from './textures'
+  type SegModel,
+} from '../data/geometry'
+import { fallbackTulips, makeBirchTexture, useTexOrFallback } from './textures'
 import { useTour } from '../store'
 
 /* ------------------------------------------------------------------ */
-/* Tree species — procedural low-poly-plus silhouettes                 */
+/* Породы деревьев — процедурные low-poly-plus силуэты                 */
 /* ------------------------------------------------------------------ */
 
 interface Species {
   id: string
-  count: number
+  share: number
   trunk: THREE.BufferGeometry
   crown: THREE.BufferGeometry
   trunkMat: THREE.MeshStandardMaterial
   crownMat: THREE.MeshStandardMaterial
-  /** preference weight along z (0..1 normalized z) */
-  bias: (zn: number) => number
+  bias: (seg: SegModel, x: number, z: number) => number
 }
 
 function blob(r: number, x: number, y: number, z: number, squashY = 1, detail = 1) {
   const g = new THREE.IcosahedronGeometry(r, detail)
-  // organic jitter
   const p = g.attributes.position
   const rand = rng(Math.floor(r * 1000 + x * 17 + y * 31 + z * 13))
   for (let i = 0; i < p.count; i++) {
@@ -70,14 +67,24 @@ function mat(color: string, opts: Partial<THREE.MeshStandardMaterialParameters> 
   })
 }
 
+function nearWater(seg: SegModel, x: number, z: number): boolean {
+  return (
+    inSwale(seg, x, z, 3) ||
+    seg.ponds.some((p) => Math.hypot(x - p.cx, z - p.cz) < Math.max(p.rx, p.rz) + 5)
+  )
+}
+
+function inGrove(seg: SegModel, x: number, z: number): boolean {
+  return seg.groves.some((g) => x > g.x0 && x < g.x1 && z > Math.min(g.z0, g.z1) && z < Math.max(g.z0, g.z1))
+}
+
 function buildSpecies(): Species[] {
   const birch = makeBirchTexture()
-
+  birch.repeat.set(1, 2)
   return [
     {
-      // Черемуха виргинская — dark red-purple crown, 5-7 m
-      id: 'cheremukha',
-      count: 180,
+      id: 'cheremukha', // Черемуха виргинская, 5-7 м, тёмно-пурпурная крона
+      share: 0.16,
       trunk: cyl(0.09, 0.14, 2.2, 1.1),
       crown: mergeGeometries([
         blob(1.5, 0, 3.4, 0),
@@ -86,13 +93,12 @@ function buildSpecies(): Species[] {
         blob(0.8, 0.1, 5.3, 0.1),
       ])!,
       trunkMat: mat('#4a3a30'),
-      crownMat: mat('#5c2e40'),
-      bias: (zn) => 0.6 + 0.4 * Math.sin(zn * Math.PI),
+      crownMat: mat('#6e3c52'),
+      bias: () => 0.9,
     },
     {
-      // Ива белая — weeping, silvery green, 6-7 m, loves water
-      id: 'iva',
-      count: 130,
+      id: 'iva', // Ива белая — плакучая, у воды
+      share: 0.12,
       trunk: cyl(0.12, 0.2, 2.8, 1.4),
       crown: mergeGeometries([
         blob(2.0, 0, 4.6, 0, 0.75),
@@ -103,12 +109,11 @@ function buildSpecies(): Species[] {
       ])!,
       trunkMat: mat('#5a4a38'),
       crownMat: mat('#8fa876'),
-      bias: (zn) => (zn > 0.28 && zn < 0.55 ? 1 : 0.25), // ponds & rain gardens
+      bias: (seg, x, z) => (nearWater(seg, x, z) ? 1 : 0.15),
     },
     {
-      // Липа мелколистная — dense round crown, 6-7 m
-      id: 'lipa',
-      count: 240,
+      id: 'lipa', // Липа мелколистная — плотная круглая крона
+      share: 0.22,
       trunk: cyl(0.11, 0.17, 2.4, 1.2),
       crown: mergeGeometries([blob(1.9, 0, 4.2, 0), blob(1.3, 0, 5.6, 0)])!,
       trunkMat: mat('#4f4136'),
@@ -116,19 +121,17 @@ function buildSpecies(): Species[] {
       bias: () => 1,
     },
     {
-      // Ель сибирская — conifer cone, 5-7 m
-      id: 'el',
-      count: 160,
+      id: 'el', // Ель сибирская — конус
+      share: 0.14,
       trunk: cyl(0.08, 0.16, 1.2, 0.6),
       crown: mergeGeometries([cone(1.7, 2.6, 2.2, 8), cone(1.3, 2.4, 3.8, 8), cone(0.85, 2.0, 5.2, 7)])!,
       trunkMat: mat('#3f332a'),
       crownMat: mat('#2c4a33'),
-      bias: (zn) => 0.35 + 0.65 * zn, // denser toward north/quiet
+      bias: (seg, x, z) => (inGrove(seg, x, z) ? 1 : 0.45),
     },
     {
-      // Сосна обыкновенная — bare trunk, irregular high crown, 5-7 m
-      id: 'sosna',
-      count: 170,
+      id: 'sosna', // Сосна обыкновенная — голый ствол, рваная крона
+      share: 0.16,
       trunk: cyl(0.1, 0.15, 3.6, 1.8),
       crown: mergeGeometries([
         blob(1.5, 0, 4.6, 0, 0.7),
@@ -137,24 +140,18 @@ function buildSpecies(): Species[] {
       ])!,
       trunkMat: mat('#a06a42'),
       crownMat: mat('#44653a'),
-      bias: (zn) => 0.4 + 0.6 * Math.abs(zn - 0.5) * 2,
+      bias: (seg, x, z) => (inGrove(seg, x, z) ? 1 : 0.55),
     },
     {
-      // Береза бородавчатая — white trunk, airy crown, 5-7 m
-      id: 'bereza',
-      count: 224,
+      id: 'bereza', // Береза бородавчатая — белый ствол
+      share: 0.2,
       trunk: cyl(0.07, 0.11, 3.0, 1.5),
       crown: mergeGeometries([blob(1.35, 0, 4.4, 0, 1.25), blob(0.9, 0.5, 5.6, 0.2, 1.1)])!,
-      trunkMat: mat('#e2ded6', { map: makeBirchTextureCached(birch) }),
+      trunkMat: mat('#e2ded6', { map: birch }),
       crownMat: mat('#7fa055'),
-      bias: (zn) => 0.5 + 0.5 * Math.sin(zn * Math.PI * 2 + 1),
+      bias: () => 0.9,
     },
   ]
-}
-
-function makeBirchTextureCached(t: THREE.Texture) {
-  t.repeat.set(1, 2)
-  return t
 }
 
 interface TreeInstance {
@@ -164,26 +161,39 @@ interface TreeInstance {
   rot: number
 }
 
-function scatterTrees(species: Species[], densityMul: number): TreeInstance[][] {
-  const rand = rng(777)
+function scatterTrees(seg: SegModel, species: Species[], densityMul: number): TreeInstance[][] {
+  const rand = rng(777 + seg.lengthM)
   return species.map((sp) => {
     const list: TreeInstance[] = []
-    const target = Math.round(sp.count * densityMul)
+    const target = Math.round(seg.treeTarget * sp.share * densityMul)
     let guard = 0
-    while (list.length < target && guard++ < target * 60) {
-      const x = (rand() * 2 - 1) * 28.5
-      const z = 3 + rand() * (LENGTH - 6)
-      if (!isPlantable(x, z)) continue
-      if (rand() > sp.bias(z / LENGTH)) continue
-      // willows crowd the water, others keep off the swale floor
-      if (sp.id !== 'iva' && inSwale(x, z, -1)) continue
+    while (list.length < target && guard++ < target * 70) {
+      let x: number
+      let z: number
+      if (seg.branch && rand() < 0.28) {
+        // рукав Айтеке би — рядовые посадки вдоль оси
+        const t = rand()
+        const i = Math.floor(t * (seg.branch.pts.length - 1))
+        const p = seg.branch.pts[i]
+        x = p.x + (rand() * 2 - 1) * 26
+        z = p.z + (rand() - 0.5) * 8
+        if (z < seg.halfW + 4) continue
+      } else {
+        x = rand() * seg.lengthM
+        z = (rand() * 2 - 1) * (seg.halfW - 1.5)
+      }
+      if (!isPlantable(seg, x, z)) continue
+      if (rand() > sp.bias(seg, x, z)) continue
+      if (sp.id !== 'iva' && inSwale(seg, x, z, -1)) continue
+      // роща — плотнее
+      if (!inGrove(seg, x, z) && rand() < 0.25) continue
       list.push({ x, z, s: 0.8 + rand() * 0.45, rot: rand() * Math.PI * 2 })
     }
     return list
   })
 }
 
-function TreeBatch({ sp, list }: { sp: Species; list: TreeInstance[] }) {
+function TreeBatch({ seg, sp, list }: { seg: SegModel; sp: Species; list: TreeInstance[] }) {
   const trunkRef = useRef<THREE.InstancedMesh>(null!)
   const crownRef = useRef<THREE.InstancedMesh>(null!)
   useLayoutEffect(() => {
@@ -193,53 +203,43 @@ function TreeBatch({ sp, list }: { sp: Species; list: TreeInstance[] }) {
     list.forEach((t, i) => {
       q.setFromAxisAngle(up, t.rot)
       m.compose(
-        new THREE.Vector3(t.x, heightAt(t.x, t.z) - 0.05, t.z),
+        new THREE.Vector3(t.x, heightAt(seg, t.x, t.z) - 0.05, t.z),
         q,
-        new THREE.Vector3(t.s, t.s * (0.9 + 0.2 * ((i * 7919) % 13) / 13), t.s),
+        new THREE.Vector3(t.s, t.s * (0.9 + (0.2 * ((i * 7919) % 13)) / 13), t.s),
       )
       trunkRef.current.setMatrixAt(i, m)
       crownRef.current.setMatrixAt(i, m)
     })
     trunkRef.current.instanceMatrix.needsUpdate = true
     crownRef.current.instanceMatrix.needsUpdate = true
-  }, [list])
+  }, [list, seg])
+  if (!list.length) return null
   return (
     <group>
-      <instancedMesh
-        ref={trunkRef}
-        args={[sp.trunk, sp.trunkMat, list.length]}
-        castShadow
-        receiveShadow
-        frustumCulled={false}
-      />
-      <instancedMesh
-        ref={crownRef}
-        args={[sp.crown, sp.crownMat, list.length]}
-        castShadow
-        frustumCulled={false}
-      />
+      <instancedMesh ref={trunkRef} args={[sp.trunk, sp.trunkMat, list.length]} castShadow receiveShadow frustumCulled={false} />
+      <instancedMesh ref={crownRef} args={[sp.crown, sp.crownMat, list.length]} castShadow frustumCulled={false} />
     </group>
   )
 }
 
-export function Trees() {
+export function Trees({ seg }: { seg: SegModel }) {
   const quality = useTour((s) => s.quality)
   const species = useMemo(buildSpecies, [])
   const lists = useMemo(
-    () => scatterTrees(species, quality === 'high' ? 1 : 0.55),
-    [species, quality],
+    () => scatterTrees(seg, species, quality === 'high' ? 1 : 0.55),
+    [seg, species, quality],
   )
   return (
     <group>
       {species.map((sp, i) => (
-        <TreeBatch key={sp.id + quality} sp={sp} list={lists[i]} />
+        <TreeBatch key={sp.id + quality + seg.id} seg={seg} sp={sp} list={lists[i]} />
       ))}
     </group>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Grass — instanced cross-quads with vertex-shader wind               */
+/* Трава с ветром                                                      */
 /* ------------------------------------------------------------------ */
 
 function grassBladeTexture(): THREE.CanvasTexture {
@@ -266,11 +266,10 @@ function grassBladeTexture(): THREE.CanvasTexture {
   return t
 }
 
-export function Grass() {
+export function Grass({ seg }: { seg: SegModel }) {
   const quality = useTour((s) => s.quality)
-  const count = quality === 'high' ? 9000 : 3000
+  const count = Math.round((quality === 'high' ? 9000 : 3000) * (seg.lengthM / 721))
   const ref = useRef<THREE.InstancedMesh>(null!)
-  const matRef = useRef<THREE.MeshStandardMaterial>(null!)
   const shaderRef = useRef<{ uniforms: { uTime: { value: number } } } | null>(null)
 
   const tex = useMemo(grassBladeTexture, [])
@@ -290,35 +289,26 @@ export function Grass() {
     const color = new THREE.Color()
     let placed = 0
     let guard = 0
-    while (placed < count && guard++ < count * 40) {
-      const x = (rand() * 2 - 1) * 28.5
-      const z = 3 + rand() * (LENGTH - 6)
-      if (!isPlantable(x, z, 2.6)) continue
-      // cluster tall golden grasses in rain gardens & near ponds
-      const nearWater =
-        inSwale(x, z, 2) || PONDS.some((p) => Math.hypot(x - p.x, z - p.z) < Math.max(p.rx, p.rz) + 4)
-      const dense = nearWater || rand() < 0.35
+    while (placed < count && guard++ < count * 50) {
+      const x = rand() * seg.lengthM
+      const z = (rand() * 2 - 1) * (seg.halfW - 1.5)
+      if (!isPlantable(seg, x, z, 2.6)) continue
+      const water = nearWater(seg, x, z)
+      const dense = water || rand() < 0.35
       if (!dense) continue
-      const s = nearWater ? 1.1 + rand() * 1.3 : 0.55 + rand() * 0.7
+      const s = water ? 1.1 + rand() * 1.3 : 0.55 + rand() * 0.7
       q.setFromAxisAngle(up, rand() * Math.PI * 2)
-      m.compose(
-        new THREE.Vector3(x, heightAt(x, z), z),
-        q,
-        new THREE.Vector3(s, s * (0.8 + rand() * 0.5), s),
-      )
+      m.compose(new THREE.Vector3(x, heightAt(seg, x, z), z), q, new THREE.Vector3(s, s * (0.8 + rand() * 0.5), s))
       ref.current.setMatrixAt(placed, m)
-      if (nearWater && rand() < 0.55) {
-        color.setHSL(0.11 + rand() * 0.03, 0.45, 0.45 + rand() * 0.15) // golden reeds
-      } else {
-        color.setHSL(0.24 + rand() * 0.05, 0.4, 0.32 + rand() * 0.12)
-      }
+      if (water && rand() < 0.55) color.setHSL(0.11 + rand() * 0.03, 0.45, 0.45 + rand() * 0.15)
+      else color.setHSL(0.24 + rand() * 0.05, 0.4, 0.32 + rand() * 0.12)
       ref.current.setColorAt(placed, color)
       placed++
     }
     ref.current.count = placed
     ref.current.instanceMatrix.needsUpdate = true
     if (ref.current.instanceColor) ref.current.instanceColor.needsUpdate = true
-  }, [count])
+  }, [count, seg])
 
   useFrame((state) => {
     if (shaderRef.current) shaderRef.current.uniforms.uTime.value = state.clock.elapsedTime
@@ -328,10 +318,7 @@ export function Grass() {
     () => (shader: THREE.WebGLProgramParametersWithUniforms) => {
       shader.uniforms.uTime = { value: 0 }
       shader.vertexShader = shader.vertexShader
-        .replace(
-          '#include <common>',
-          '#include <common>\nuniform float uTime;',
-        )
+        .replace('#include <common>', '#include <common>\nuniform float uTime;')
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
@@ -349,32 +336,57 @@ export function Grass() {
   )
 
   return (
-    <instancedMesh
-      key={quality}
-      ref={ref}
-      args={[geo, undefined, count]}
-      frustumCulled={false}
-      receiveShadow
-    >
-      <meshStandardMaterial
-        ref={matRef}
-        map={tex}
-        alphaTest={0.5}
-        side={THREE.DoubleSide}
-        roughness={1}
-        onBeforeCompile={onBeforeCompile}
-      />
+    <instancedMesh key={quality + seg.id} ref={ref} args={[geo, undefined, count]} frustumCulled={false} receiveShadow>
+      <meshStandardMaterial map={tex} alphaTest={0.5} side={THREE.DoubleSide} roughness={1} onBeforeCompile={onBeforeCompile} />
     </instancedMesh>
   )
 }
 
 /* ------------------------------------------------------------------ */
-/* Rocks on pond banks and in rain gardens                             */
+/* Тюльпановые клумбы (2 очередь)                                      */
 /* ------------------------------------------------------------------ */
 
-export function Rocks() {
+export function TulipBeds({ seg }: { seg: SegModel }) {
+  const tulips = useTexOrFallback('tulips', fallbackTulips, [1, 1])
+  const geo = useMemo(() => {
+    if (seg.id !== 's2b') return null
+    const parts: THREE.BufferGeometry[] = []
+    const plaza = seg.plazas[0]
+    const rand = rng(414)
+    // клумбы-лепестки вокруг центральной зоны + у входов
+    const spots: { x: number; z: number; r: number }[] = []
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2 + 0.3
+      spots.push({ x: plaza.cx + Math.cos(a) * (plaza.r + 14 + rand() * 8), z: plaza.cz + Math.sin(a) * (plaza.r + 10 + rand() * 6), r: 3 + rand() * 2.5 })
+    }
+    spots.push({ x: 30, z: -14, r: 4 }, { x: 55, z: 16, r: 3.5 }, { x: 905, z: -10, r: 4 }, { x: 928, z: 12, r: 3 })
+    for (const s of spots) {
+      const disc = new THREE.CircleGeometry(s.r, 20)
+      disc.rotateX(-Math.PI / 2)
+      const y = heightAt(seg, s.x, s.z) + 0.12
+      disc.translate(s.x, y, s.z)
+      const pos = disc.attributes.position
+      const uv = disc.attributes.uv
+      for (let i = 0; i < pos.count; i++) uv.setXY(i, pos.getX(i) / 4, pos.getZ(i) / 4)
+      parts.push(disc)
+    }
+    return mergeGeometries(parts, false)!
+  }, [seg])
+  if (!geo) return null
+  return (
+    <mesh geometry={geo} receiveShadow>
+      <meshStandardMaterial map={tulips} roughness={0.95} />
+    </mesh>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Валуны                                                              */
+/* ------------------------------------------------------------------ */
+
+export function Rocks({ seg }: { seg: SegModel }) {
   const ref = useRef<THREE.InstancedMesh>(null!)
-  const count = 150
+  const count = 60 + seg.ponds.length * 45 + seg.swales.length * 12
   const geo = useMemo(() => {
     const g = new THREE.DodecahedronGeometry(0.5, 0)
     const rand = rng(553)
@@ -397,24 +409,31 @@ export function Rocks() {
     const up = new THREE.Vector3(0, 1, 0)
     let placed = 0
     let guard = 0
-    while (placed < count && guard++ < count * 80) {
-      // ring around ponds and swales
-      const pool = rand() < 0.6 ? PONDS : SWALES
-      const p = pool[Math.floor(rand() * pool.length)]
-      const a = rand() * Math.PI * 2
-      const rr = 1.02 + rand() * 0.25
-      const x = p.x + Math.cos(a) * p.rx * rr
-      const z = p.z + Math.sin(a) * p.rz * rr
-      if (Math.abs(x) > 28) continue
+    const pools = [...seg.ponds, ...seg.swales]
+    while (placed < count && guard++ < count * 90) {
+      let x: number
+      let z: number
+      if (pools.length && rand() < 0.75) {
+        const p = pools[Math.floor(rand() * pools.length)]
+        const a = rand() * Math.PI * 2
+        const rr = 1.02 + rand() * 0.25
+        x = p.cx + Math.cos(a) * p.rx * rr
+        z = p.cz + Math.sin(a) * p.rz * rr
+      } else {
+        x = rand() * seg.lengthM
+        z = (rand() * 2 - 1) * (seg.halfW - 3)
+        if (!isPlantable(seg, x, z, 3)) continue
+      }
+      if (Math.abs(z) > seg.halfW - 1.5 && !seg.branch) continue
       const s = 0.35 + rand() * 1.1
       q.setFromAxisAngle(up, rand() * Math.PI * 2)
-      m.compose(new THREE.Vector3(x, heightAt(x, z) + s * 0.15, z), q, new THREE.Vector3(s, s * (0.7 + rand() * 0.4), s))
+      m.compose(new THREE.Vector3(x, heightAt(seg, x, z) + s * 0.15, z), q, new THREE.Vector3(s, s * (0.7 + rand() * 0.4), s))
       ref.current.setMatrixAt(placed, m)
       placed++
     }
     ref.current.count = placed
     ref.current.instanceMatrix.needsUpdate = true
-  }, [])
+  }, [count, seg])
   return (
     <instancedMesh ref={ref} args={[geo, undefined, count]} castShadow receiveShadow frustumCulled={false}>
       <meshStandardMaterial color="#8d8a82" roughness={0.95} flatShading />
@@ -422,12 +441,14 @@ export function Rocks() {
   )
 }
 
-export default function Vegetation() {
+export default function Vegetation({ segId }: { segId: keyof typeof SEGMENTS }) {
+  const seg = SEGMENTS[segId]
   return (
     <group>
-      <Trees />
-      <Grass />
-      <Rocks />
+      <Trees seg={seg} />
+      <Grass seg={seg} />
+      <TulipBeds seg={seg} />
+      <Rocks seg={seg} />
     </group>
   )
 }

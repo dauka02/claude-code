@@ -4,16 +4,14 @@ import { useFrame } from '@react-three/fiber'
 import { useGLTF } from '@react-three/drei'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import {
-  COURT,
-  LENGTH,
-  PATH_CURVE,
-  RUBBER,
+  SEGMENTS,
   WATER_LEVEL,
   heightAt,
-  pathXAt,
+  promAt,
   rng,
-} from './constants'
-import { offsetPolyline, samplePath, wallGeometry, type Pt } from './geometry'
+  type SegModel,
+} from '../data/geometry'
+import { offsetPolyline, wallGeometry, type Pt } from './geometry'
 import { useWallSegments } from './Boulevard'
 import {
   makeChainlinkTexture,
@@ -22,17 +20,19 @@ import {
   makeWoodTexture,
 } from './textures'
 import { useTour } from '../store'
+import Stage2Props from './PropsStage2'
 
 export const MODELS = {
   kulan: '/assets/models/kulan.glb',
   stela: '/assets/models/stela.glb',
   bench: '/assets/models/bench_angular.glb',
   lamp: '/assets/models/lamp.glb',
+  pergola: '/assets/models/pergola.glb',
+  tunnel: '/assets/models/tunnel_portal.glb',
+  stela2: '/assets/models/stela_greenline.glb',
 } as const
 
-/* ------------------------------------------------------------------ */
-/* GLB loading with graceful procedural fallback                       */
-/* ------------------------------------------------------------------ */
+/* ---------------- GLB c процедурным фолбэком ---------------- */
 
 class GLBBoundary extends React.Component<
   { fallback: React.ReactNode; children: React.ReactNode },
@@ -43,7 +43,7 @@ class GLBBoundary extends React.Component<
     return { failed: true }
   }
   componentDidCatch() {
-    /* asset missing — procedural fallback stays */
+    /* ассет не скачан — остаётся процедурный фолбэк */
   }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children
@@ -84,7 +84,6 @@ function ScaledGLB({
   return <primitive object={obj} position={position} rotation={[0, rotationY, 0]} />
 }
 
-/** Hero asset: try the Higgsfield GLB, fall back to procedural geometry. */
 export function Hero({
   url,
   height,
@@ -107,24 +106,7 @@ export function Hero({
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Street lamps — 8.5 m, wood-painted metal, 4 heads, 3000K            */
-/* ------------------------------------------------------------------ */
-
-let lampCache: { x: number; z: number; y: number }[] | null = null
-export function lampPositions() {
-  if (lampCache) return lampCache
-  const pts = samplePath(PATH_CURVE, 64)
-  const res: { x: number; z: number; y: number }[] = []
-  for (let i = 2; i < pts.length - 2; i += 2) {
-    const side = (i / 2) % 2 === 0 ? 1 : -1
-    const [o] = offsetPolyline(pts.slice(i, i + 2), side * 2.9)
-    if (o.z < 4 || o.z > LENGTH - 4) continue
-    res.push({ x: o.x, z: o.z, y: heightAt(o.x, o.z) })
-  }
-  lampCache = res
-  return res
-}
+/* ---------------- фонари 8,5 м / 4 плафона / 3000K ---------------- */
 
 const HEAD_OFFSETS: [number, number, number][] = [
   [0.32, 7.55, 0],
@@ -132,6 +114,24 @@ const HEAD_OFFSETS: [number, number, number][] = [
   [0.1, 8.15, -0.3],
   [-0.08, 8.32, 0.28],
 ]
+
+const lampCache = new Map<string, { x: number; z: number; y: number }[]>()
+export function lampPositions(seg: SegModel) {
+  const c = lampCache.get(seg.id)
+  if (c) return c
+  const res: { x: number; z: number; y: number }[] = []
+  const put = (pts: Pt[], step: number) => {
+    for (let i = 4; i < pts.length - 4; i += step) {
+      const side = (i / step) % 2 === 0 ? 1 : -1
+      const [o] = offsetPolyline(pts.slice(i, i + 2), side * 3.1)
+      res.push({ x: o.x, z: o.z, y: heightAt(seg, o.x, o.z) })
+    }
+  }
+  put(seg.promenade.pts, 13)
+  if (seg.branch) put(seg.branch.pts, 15)
+  lampCache.set(seg.id, res)
+  return res
+}
 
 function lampBodyGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
@@ -161,9 +161,9 @@ function lampHeadsGeometry(): THREE.BufferGeometry {
   return mergeGeometries(parts, false)!
 }
 
-export function Lamps() {
+export function Lamps({ seg }: { seg: SegModel }) {
   const night = useTour((s) => s.night)
-  const positions = useMemo(lampPositions, [])
+  const positions = useMemo(() => lampPositions(seg), [seg])
   const bodyRef = useRef<THREE.InstancedMesh>(null!)
   const headsRef = useRef<THREE.InstancedMesh>(null!)
   const headsMat = useRef<THREE.MeshStandardMaterial>(null!)
@@ -175,8 +175,7 @@ export function Lamps() {
 
   const glowGeo = useMemo(() => {
     const pos: number[] = []
-    for (const l of positions)
-      for (const [hx, hy, hz] of HEAD_OFFSETS) pos.push(l.x + hx, l.y + hy, l.z + hz)
+    for (const l of positions) for (const [hx, hy, hz] of HEAD_OFFSETS) pos.push(l.x + hx, l.y + hy, l.z + hz)
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
     return g
@@ -199,29 +198,19 @@ export function Lamps() {
   useFrame((_, delta) => {
     const k = Math.min(1, delta * 2)
     if (headsMat.current)
-      headsMat.current.emissiveIntensity = THREE.MathUtils.lerp(
-        headsMat.current.emissiveIntensity,
-        night ? 3.2 : 0.0,
-        k,
-      )
-    if (glowMat.current)
-      glowMat.current.opacity = THREE.MathUtils.lerp(glowMat.current.opacity, night ? 0.55 : 0, k)
+      headsMat.current.emissiveIntensity = THREE.MathUtils.lerp(headsMat.current.emissiveIntensity, night ? 3.2 : 0.0, k)
+    if (glowMat.current) glowMat.current.opacity = THREE.MathUtils.lerp(glowMat.current.opacity, night ? 0.55 : 0, k)
   })
+
+  const heroSpot = promAt(seg, seg.lengthM - 14)
 
   return (
     <group>
       <instancedMesh ref={bodyRef} args={[bodyGeo, undefined, positions.length]} castShadow frustumCulled={false}>
-        {/* metal painted as natural wood */}
         <meshStandardMaterial color="#8a6a44" roughness={0.6} metalness={0.35} />
       </instancedMesh>
       <instancedMesh ref={headsRef} args={[headsGeo, undefined, positions.length]} frustumCulled={false}>
-        <meshStandardMaterial
-          ref={headsMat}
-          color="#d8d4c8"
-          emissive="#ffbe78"
-          emissiveIntensity={0}
-          roughness={0.4}
-        />
+        <meshStandardMaterial ref={headsMat} color="#d8d4c8" emissive="#ffbe78" emissiveIntensity={0} roughness={0.4} />
       </instancedMesh>
       <points geometry={glowGeo} frustumCulled={false}>
         <pointsMaterial
@@ -235,20 +224,17 @@ export function Lamps() {
           blending={THREE.AdditiveBlending}
         />
       </points>
-      {/* one hero GLB lamp by the entrance plaza */}
       <Hero
         url={MODELS.lamp}
         height={8.5}
-        position={[pathXAt(14) + 4.2, heightAt(pathXAt(14) + 4.2, 14), 14]}
+        position={[heroSpot.x + 4, heightAt(seg, heroSpot.x + 4, heroSpot.z), heroSpot.z]}
         fallback={null}
       />
     </group>
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Benches (classic + angular on retaining walls) and urns             */
-/* ------------------------------------------------------------------ */
+/* ---------------- скамьи и урны ---------------- */
 
 function classicBenchGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
@@ -275,7 +261,7 @@ function classicBenchGeometry(): THREE.BufferGeometry {
   return mergeGeometries(parts, false)!
 }
 
-function angularBenchGeometry(): THREE.BufferGeometry {
+export function angularBenchGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
   const seat = new THREE.BoxGeometry(1.9, 0.07, 0.55)
   seat.translate(0, 0.06, 0.1)
@@ -292,9 +278,15 @@ function angularBenchGeometry(): THREE.BufferGeometry {
   return mergeGeometries(parts, false)!
 }
 
-export function Benches() {
+function urnGeo() {
+  const g = new THREE.CylinderGeometry(0.22, 0.18, 0.6, 10)
+  g.translate(0, 0.3, 0)
+  return g
+}
+
+export function Benches({ seg }: { seg: SegModel }) {
   const wood = useMemo(makeWoodTexture, [])
-  const segs = useWallSegments()
+  const walls = useWallSegments(seg)
   const classicGeo = useMemo(classicBenchGeometry, [])
   const angularGeo = useMemo(angularBenchGeometry, [])
   const classicRef = useRef<THREE.InstancedMesh>(null!)
@@ -302,29 +294,44 @@ export function Benches() {
   const urnRef = useRef<THREE.InstancedMesh>(null!)
 
   const classicSpots = useMemo(() => {
-    const pts = samplePath(PATH_CURVE, 40)
     const res: { p: Pt; rot: number }[] = []
-    for (let i = 3; i < pts.length - 2; i += 3) {
+    const pts = seg.promenade.pts
+    const step = Math.floor(pts.length / (seg.lengthM / 38))
+    for (let i = step; i < pts.length - step; i += step) {
       const side = i % 2 === 0 ? 1 : -1
-      const [o] = offsetPolyline(pts.slice(i, i + 2), side * 2.7)
+      const [o] = offsetPolyline(pts.slice(i, i + 2), side * 2.9)
+      // не ставим скамьи в изгородь лужайки, на площадки и в бассейны
+      if (seg.lawns.some((l) => Math.hypot(o.x - l.cx, o.z - l.cz) < l.r + 4.5)) continue
+      if (seg.smallPool && Math.hypot(o.x - seg.smallPool.cx, o.z - seg.smallPool.cz) < seg.smallPool.r + 3) continue
       const dir = Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)
       res.push({ p: o, rot: dir + (side > 0 ? Math.PI : 0) })
     }
     return res
-  }, [])
+  }, [seg])
 
   const angularSpots = useMemo(() => {
-    const res: { p: Pt; rot: number }[] = []
-    segs.forEach((s, i) => {
+    const res: { p: Pt; rot: number; onWall: boolean }[] = []
+    walls.forEach((s, i) => {
       if (s.type === 2 || i % 3 !== 0) return
       const mid = Math.floor(s.pts.length / 2)
       const a = s.pts[Math.max(0, mid - 1)]
       const b = s.pts[Math.min(s.pts.length - 1, mid + 1)]
       const dir = Math.atan2(b.x - a.x, b.z - a.z)
-      res.push({ p: s.pts[mid], rot: dir + Math.PI / 2 + (s.side > 0 ? Math.PI : 0) })
+      res.push({ p: s.pts[mid], rot: dir + Math.PI / 2 + (s.side > 0 ? Math.PI : 0), onWall: true })
     })
+    // эко-скамьи на гравии (2 очередь)
+    if (seg.id !== 's1') {
+      const rand = rng(515)
+      const pts = seg.promenade.pts
+      for (let i = 20; i < pts.length - 20; i += 46) {
+        const side = rand() > 0.5 ? 1 : -1
+        const [o] = offsetPolyline(pts.slice(i, i + 2), side * (5 + rand() * 3))
+        const dir = Math.atan2(pts[i + 1].x - pts[i].x, pts[i + 1].z - pts[i].z)
+        res.push({ p: o, rot: dir + (side > 0 ? Math.PI : 0), onWall: false })
+      }
+    }
     return res
-  }, [segs])
+  }, [walls, seg])
 
   useLayoutEffect(() => {
     const m = new THREE.Matrix4()
@@ -332,13 +339,11 @@ export function Benches() {
     const up = new THREE.Vector3(0, 1, 0)
     classicSpots.forEach((s, i) => {
       q.setFromAxisAngle(up, s.rot)
-      m.compose(new THREE.Vector3(s.p.x, heightAt(s.p.x, s.p.z), s.p.z), q, new THREE.Vector3(1, 1, 1))
+      m.compose(new THREE.Vector3(s.p.x, heightAt(seg, s.p.x, s.p.z), s.p.z), q, new THREE.Vector3(1, 1, 1))
       classicRef.current.setMatrixAt(i, m)
-      // urn next to bench
-      q.setFromAxisAngle(up, s.rot)
       const ux = s.p.x + Math.cos(s.rot) * 1.3
       const uz = s.p.z - Math.sin(s.rot) * 1.3
-      m.compose(new THREE.Vector3(ux, heightAt(ux, uz), uz), q, new THREE.Vector3(1, 1, 1))
+      m.compose(new THREE.Vector3(ux, heightAt(seg, ux, uz), uz), q, new THREE.Vector3(1, 1, 1))
       urnRef.current.setMatrixAt(i, m)
     })
     classicRef.current.instanceMatrix.needsUpdate = true
@@ -346,14 +351,16 @@ export function Benches() {
     angularSpots.forEach((s, i) => {
       q.setFromAxisAngle(up, s.rot)
       m.compose(
-        new THREE.Vector3(s.p.x, heightAt(s.p.x, s.p.z) + 0.42, s.p.z),
+        new THREE.Vector3(s.p.x, heightAt(seg, s.p.x, s.p.z) + (s.onWall ? 0.42 : 0.05), s.p.z),
         q,
         new THREE.Vector3(1, 1, 1),
       )
       angularRef.current.setMatrixAt(i, m)
     })
     angularRef.current.instanceMatrix.needsUpdate = true
-  }, [classicSpots, angularSpots])
+  }, [classicSpots, angularSpots, seg])
+
+  const heroSpot = promAt(seg, 52)
 
   return (
     <group>
@@ -363,14 +370,13 @@ export function Benches() {
       <instancedMesh ref={urnRef} args={[urnGeo(), undefined, classicSpots.length]} castShadow frustumCulled={false}>
         <meshStandardMaterial color="#26282a" roughness={0.7} metalness={0.5} />
       </instancedMesh>
-      <instancedMesh ref={angularRef} args={[angularGeo, undefined, angularSpots.length]} castShadow frustumCulled={false}>
+      <instancedMesh ref={angularRef} args={[angularGeo, undefined, Math.max(1, angularSpots.length)]} castShadow frustumCulled={false}>
         <meshStandardMaterial map={wood} roughness={0.75} />
       </instancedMesh>
-      {/* hero GLB angular bench showcased near the first type-2 wall */}
       <Hero
         url={MODELS.bench}
         height={0.85}
-        position={[pathXAt(52) - 3.4, heightAt(pathXAt(52) - 3.4, 52), 52]}
+        position={[heroSpot.x - 3.4, heightAt(seg, heroSpot.x - 3.4, heroSpot.z), heroSpot.z]}
         rotationY={0.9}
         fallback={null}
       />
@@ -378,23 +384,16 @@ export function Benches() {
   )
 }
 
-function urnGeo() {
-  const g = new THREE.CylinderGeometry(0.22, 0.18, 0.6, 10)
-  g.translate(0, 0.3, 0)
-  return g
-}
+/* ---------------- стела THE GREEN LINE (1 очередь) ---------------- */
 
-/* ------------------------------------------------------------------ */
-/* Stela THE GREEN LINE                                                */
-/* ------------------------------------------------------------------ */
-
-export function Stela() {
+export function Stela({ seg }: { seg: SegModel }) {
   const night = useTour((s) => s.night)
   const mapTex = useMemo(makeStelaTexture, [])
   const screenMat = useRef<THREE.MeshStandardMaterial>(null!)
-  const x = pathXAt(8) - 5
-  const z = 10
-  const y = heightAt(x, z)
+  const spot = promAt(seg, seg.lengthM - 10)
+  const x = spot.x - 4.5
+  const z = spot.z + 1
+  const y = heightAt(seg, x, z)
   useFrame((_, delta) => {
     if (screenMat.current)
       screenMat.current.emissiveIntensity = THREE.MathUtils.lerp(
@@ -403,6 +402,7 @@ export function Stela() {
         Math.min(1, delta * 2),
       )
   })
+  if (seg.id !== 's1') return null
   const fallback = (
     <group position={[x, y, z]} rotation={[0, 0.5, 0]}>
       <mesh position={[0, 1.3, 0]} castShadow>
@@ -411,28 +411,30 @@ export function Stela() {
       </mesh>
       <mesh position={[0, 1.32, 0.16]}>
         <planeGeometry args={[0.54, 2.3]} />
-        <meshStandardMaterial
-          ref={screenMat}
-          map={mapTex}
-          emissive="#cfe8d2"
-          emissiveMap={mapTex}
-          emissiveIntensity={0.55}
-          roughness={0.4}
-        />
+        <meshStandardMaterial ref={screenMat} map={mapTex} emissive="#cfe8d2" emissiveMap={mapTex} emissiveIntensity={0.55} roughness={0.4} />
       </mesh>
     </group>
   )
-  return <Hero url={MODELS.stela} height={2.6} position={[x, y, z]} rotationY={0.5} fallback={fallback} />
+  return (
+    <group>
+      <Hero url={MODELS.stela} height={2.6} position={[x, y, z]} rotationY={0.5} fallback={fallback} />
+      {/* вторая стела у западного входа */}
+      <Hero
+        url={MODELS.stela}
+        height={2.6}
+        position={[promAt(seg, 10).x + 4, heightAt(seg, promAt(seg, 10).x + 4, promAt(seg, 10).z), promAt(seg, 10).z]}
+        rotationY={-2.2}
+        fallback={null}
+      />
+    </group>
+  )
 }
 
-/* ------------------------------------------------------------------ */
-/* Kulan play sculpture (~6 m, stacked wooden slats) + play props      */
-/* ------------------------------------------------------------------ */
+/* ---------------- кулан и игровые элементы (1 очередь) ---------------- */
 
 function kulanGeometry(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = []
   const slat = 0.16
-  // body: horizontal slat stack, elliptical profile
   for (let i = 0; i < 11; i++) {
     const y = 2.3 + i * slat
     const t = (i / 10) * Math.PI
@@ -442,7 +444,6 @@ function kulanGeometry(): THREE.BufferGeometry {
     g.translate(0, y, -0.2)
     parts.push(g)
   }
-  // neck: rising slanted stack
   for (let i = 0; i < 12; i++) {
     const y = 3.5 + i * slat
     const k = i / 11
@@ -450,20 +451,17 @@ function kulanGeometry(): THREE.BufferGeometry {
     g.translate(0, y, 1.35 + k * 0.9)
     parts.push(g)
   }
-  // head: forward stack
   for (let i = 0; i < 5; i++) {
     const y = 5.42 + i * slat * 0.9
     const g = new THREE.BoxGeometry(0.5, slat * 0.75, 1.15 - i * 0.12)
     g.translate(0, y, 2.65 + i * 0.1)
     parts.push(g)
   }
-  // ears
   for (const sx of [-0.14, 0.14]) {
     const ear = new THREE.BoxGeometry(0.1, 0.42, 0.16)
     ear.translate(sx, 6.25, 2.4)
     parts.push(ear)
   }
-  // legs
   for (const [lx, lz] of [
     [-0.42, -1.5],
     [0.42, -1.5],
@@ -474,7 +472,6 @@ function kulanGeometry(): THREE.BufferGeometry {
     leg.translate(lx, 1.15, lz)
     parts.push(leg)
   }
-  // slide from the side opening
   const slide = new THREE.BoxGeometry(0.8, 0.08, 3.6)
   slide.rotateX(-0.62)
   slide.translate(1.05, 1.55, -1.2)
@@ -488,12 +485,12 @@ function kulanGeometry(): THREE.BufferGeometry {
   return mergeGeometries(parts, false)!
 }
 
-export function Kulan() {
+export function Kulan({ seg }: { seg: SegModel }) {
   const wood = useMemo(makeWoodTexture, [])
   const geo = useMemo(kulanGeometry, [])
-  const x = RUBBER.x + 2
-  const z = RUBBER.z + 6
-  const y = heightAt(x, z)
+  if (!seg.kulan) return null
+  const { x, z } = seg.kulan
+  const y = heightAt(seg, x, z)
   const fallback = (
     <mesh geometry={geo} position={[x, y, z]} rotation={[0, -0.7, 0]} castShadow receiveShadow>
       <meshStandardMaterial map={wood} roughness={0.8} />
@@ -502,63 +499,122 @@ export function Kulan() {
   return <Hero url={MODELS.kulan} height={6} position={[x, y, z]} rotationY={-0.7} fallback={fallback} />
 }
 
-/** Green "cactus" play poles + small climbing logs on the rubber surface. */
-export function PlayProps() {
-  const rand = rng(6161)
-  const poles = useMemo(() => {
-    const res: { x: number; z: number; h: number; r: number }[] = []
-    for (let i = 0; i < 14; i++) {
-      const a = rand() * Math.PI * 2
-      const rr = rand() * 0.75
-      const x = RUBBER.x - 4 + Math.cos(a) * RUBBER.rx * rr
-      const z = RUBBER.z - 10 + Math.sin(a) * RUBBER.rz * rr * 0.5
-      res.push({ x, z, h: 0.9 + rand() * 1.8, r: 0.12 + rand() * 0.1 })
+/** Зелёные «кактусы» + деревянное игровое оборудование на площадках. */
+export function PlayProps({ seg }: { seg: SegModel }) {
+  const wood = useMemo(makeWoodTexture, [])
+  const poleRef = useRef<THREE.InstancedMesh>(null!)
+  const data = useMemo(() => {
+    const rand = rng(6161)
+    const poles: { x: number; z: number; h: number; r: number }[] = []
+    const frames: { x: number; z: number; rot: number; s: number }[] = []
+    const areas: { cx: number; cz: number; rx: number; rz: number }[] = []
+    if (seg.rubber) areas.push(seg.rubber)
+    areas.push(...seg.playgrounds)
+    for (const a of areas) {
+      for (let i = 0; i < 6; i++) {
+        const ang = rand() * Math.PI * 2
+        poles.push({
+          x: a.cx + Math.cos(ang) * a.rx * rand() * 0.7,
+          z: a.cz + Math.sin(ang) * a.rz * rand() * 0.7,
+          h: 0.9 + rand() * 1.8,
+          r: 0.12 + rand() * 0.1,
+        })
+      }
+      for (let i = 0; i < 3; i++) {
+        frames.push({
+          x: a.cx + (rand() - 0.5) * a.rx,
+          z: a.cz + (rand() - 0.5) * a.rz,
+          rot: rand() * Math.PI,
+          s: 0.8 + rand() * 0.5,
+        })
+      }
     }
-    return res
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return { poles, frames }
+  }, [seg])
+
+  const poleGeo = useMemo(() => new THREE.CapsuleGeometry(1, 1, 3, 8), [])
+  const frameGeo = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = []
+    // деревянная рама-лазалка (как на рендерах детских площадок)
+    for (const [x0, z0, x1, z1] of [
+      [-1.2, 0, 1.2, 0],
+      [0, -1, 0, 1],
+    ]) {
+      const beam = new THREE.BoxGeometry(Math.hypot(x1 - x0, z1 - z0) || 0.14, 0.14, 0.14)
+      beam.rotateY(Math.atan2(z1 - z0, x1 - x0))
+      beam.translate((x0 + x1) / 2, 1.35, (z0 + z1) / 2)
+      parts.push(beam)
+    }
+    for (const [px, pz] of [
+      [-1.2, 0],
+      [1.2, 0],
+      [0, -1],
+      [0, 1],
+    ]) {
+      const post = new THREE.BoxGeometry(0.12, 1.4, 0.12)
+      post.translate(px, 0.7, pz)
+      parts.push(post)
+    }
+    const bar = new THREE.CylinderGeometry(0.03, 0.03, 2.2, 6)
+    bar.rotateZ(Math.PI / 2)
+    bar.translate(0, 1.05, 0.5)
+    parts.push(bar)
+    return mergeGeometries(parts, false)!
   }, [])
-  const ref = useRef<THREE.InstancedMesh>(null!)
-  const geo = useMemo(() => {
-    const g = new THREE.CapsuleGeometry(1, 1, 3, 8)
-    return g
-  }, [])
+  const frameRef = useRef<THREE.InstancedMesh>(null!)
+
   useLayoutEffect(() => {
     const m = new THREE.Matrix4()
-    poles.forEach((p, i) => {
+    data.poles.forEach((p, i) => {
       m.makeScale(p.r, p.h / 2, p.r)
-      m.setPosition(p.x, heightAt(p.x, p.z) + p.h / 2, p.z)
-      ref.current.setMatrixAt(i, m)
+      m.setPosition(p.x, heightAt(seg, p.x, p.z) + p.h / 2, p.z)
+      poleRef.current.setMatrixAt(i, m)
     })
-    ref.current.instanceMatrix.needsUpdate = true
-  }, [poles])
+    poleRef.current.instanceMatrix.needsUpdate = true
+    const q = new THREE.Quaternion()
+    const up = new THREE.Vector3(0, 1, 0)
+    data.frames.forEach((f, i) => {
+      q.setFromAxisAngle(up, f.rot)
+      m.compose(new THREE.Vector3(f.x, heightAt(seg, f.x, f.z), f.z), q, new THREE.Vector3(f.s, f.s, f.s))
+      frameRef.current.setMatrixAt(i, m)
+    })
+    frameRef.current.instanceMatrix.needsUpdate = true
+  }, [data, seg])
+
+  if (!data.poles.length) return null
   return (
-    <instancedMesh ref={ref} args={[geo, undefined, poles.length]} castShadow frustumCulled={false}>
-      <meshStandardMaterial color="#5fae57" roughness={0.7} />
-    </instancedMesh>
+    <group>
+      <instancedMesh ref={poleRef} args={[poleGeo, undefined, data.poles.length]} castShadow frustumCulled={false}>
+        <meshStandardMaterial color="#5fae57" roughness={0.7} />
+      </instancedMesh>
+      <instancedMesh ref={frameRef} args={[frameGeo, undefined, Math.max(1, data.frames.length)]} castShadow frustumCulled={false}>
+        <meshStandardMaterial map={wood} roughness={0.85} />
+      </instancedMesh>
+    </group>
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Basketball court: chain-link fence + hoops                          */
-/* ------------------------------------------------------------------ */
+/* ---------------- корт (1 очередь) ---------------- */
 
-export function Court() {
+export function Court({ seg }: { seg: SegModel }) {
   const chain = useMemo(makeChainlinkTexture, [])
-  const H = 4
-  const { x, z, w, l } = COURT
+  const chainL = useMemo(() => {
+    const t = chain.clone()
+    return t
+  }, [chain])
   const postsRef = useRef<THREE.InstancedMesh>(null!)
+  const H = 4
+  const c = seg.court
   const posts = useMemo(() => {
+    if (!c) return [] as [number, number][]
     const res: [number, number][] = []
     const step = 4
-    for (let i = 0; i <= w; i += step) {
-      res.push([x - w / 2 + i, z - l / 2], [x - w / 2 + i, z + l / 2])
-    }
-    for (let j = step; j < l; j += step) {
-      res.push([x - w / 2, z - l / 2 + j], [x + w / 2, z - l / 2 + j])
-    }
+    for (let i = 0; i <= c.w; i += step) res.push([c.x - c.w / 2 + i, c.z - c.l / 2], [c.x - c.w / 2 + i, c.z + c.l / 2])
+    for (let j = step; j < c.l; j += step) res.push([c.x - c.w / 2, c.z - c.l / 2 + j], [c.x + c.w / 2, c.z - c.l / 2 + j])
     return res
-  }, [x, z, w, l])
+  }, [c])
   useLayoutEffect(() => {
+    if (!c || !postsRef.current) return
     const m = new THREE.Matrix4()
     posts.forEach(([px, pz], i) => {
       m.identity()
@@ -566,70 +622,37 @@ export function Court() {
       postsRef.current.setMatrixAt(i, m)
     })
     postsRef.current.instanceMatrix.needsUpdate = true
-  }, [posts])
-
-  const fenceMat = (
-    <meshStandardMaterial
-      color="#9aa0a5"
-      alphaMap={chain}
-      transparent
-      alphaTest={0.35}
-      side={THREE.DoubleSide}
-      roughness={0.6}
-      metalness={0.6}
-    />
-  )
-  chain.repeat.set(w / 0.55, H / 0.55)
-  const chainL = chain.clone()
-  chainL.repeat.set(l / 0.55, H / 0.55)
-
+  }, [posts, c])
+  if (!c) return null
+  chain.repeat.set(c.w / 0.55, H / 0.55)
+  chainL.repeat.set(c.l / 0.55, H / 0.55)
   return (
     <group>
-      {/* fence sides (gate gap on the west side) */}
-      <mesh position={[x, H / 2, z - l / 2]}>
-        <planeGeometry args={[w, H]} />
-        {fenceMat}
+      {[c.z - c.l / 2, c.z + c.l / 2].map((zz, i) => (
+        <mesh key={i} position={[c.x, H / 2, zz]}>
+          <planeGeometry args={[c.w, H]} />
+          <meshStandardMaterial color="#9aa0a5" alphaMap={chain} transparent alphaTest={0.35} side={THREE.DoubleSide} roughness={0.6} metalness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[c.x + c.w / 2, H / 2, c.z]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[c.l, H]} />
+        <meshStandardMaterial color="#9aa0a5" alphaMap={chainL} transparent alphaTest={0.35} side={THREE.DoubleSide} roughness={0.6} metalness={0.6} />
       </mesh>
-      <mesh position={[x, H / 2, z + l / 2]}>
-        <planeGeometry args={[w, H]} />
-        {fenceMat}
+      <mesh position={[c.x - c.w / 2, H / 2, c.z + c.l / 4]} rotation={[0, Math.PI / 2, 0]}>
+        <planeGeometry args={[c.l / 2 - 2, H]} />
+        <meshStandardMaterial color="#9aa0a5" alphaMap={chainL} transparent alphaTest={0.35} side={THREE.DoubleSide} roughness={0.6} metalness={0.6} />
       </mesh>
-      <mesh position={[x + w / 2, H / 2, z]} rotation={[0, -Math.PI / 2, 0]}>
-        <planeGeometry args={[l, H]} />
-        <meshStandardMaterial
-          color="#9aa0a5"
-          alphaMap={chainL}
-          transparent
-          alphaTest={0.35}
-          side={THREE.DoubleSide}
-          roughness={0.6}
-          metalness={0.6}
-        />
-      </mesh>
-      <mesh position={[x - w / 2, H / 2, z + l / 4]} rotation={[0, Math.PI / 2, 0]}>
-        <planeGeometry args={[l / 2 - 2, H]} />
-        <meshStandardMaterial
-          color="#9aa0a5"
-          alphaMap={chainL}
-          transparent
-          alphaTest={0.35}
-          side={THREE.DoubleSide}
-          roughness={0.6}
-          metalness={0.6}
-        />
-      </mesh>
-      <instancedMesh ref={postsRef} args={[postGeo(), undefined, posts.length]} frustumCulled={false}>
+      <instancedMesh ref={postsRef} args={[postGeo(), undefined, Math.max(1, posts.length)]} frustumCulled={false}>
         <meshStandardMaterial color="#3a3d40" roughness={0.5} metalness={0.7} />
       </instancedMesh>
-      <Hoop x={x} z={z - l / 2 + 1.6} rot={0} />
-      <Hoop x={x} z={z + l / 2 - 1.6} rot={Math.PI} />
+      <Hoop x={c.x} z={c.z - c.l / 2 + 1.6} rot={0} />
+      <Hoop x={c.x} z={c.z + c.l / 2 - 1.6} rot={Math.PI} />
     </group>
   )
 }
 
 function postGeo() {
-  const g = new THREE.CylinderGeometry(0.05, 0.05, 4, 6)
-  return g
+  return new THREE.CylinderGeometry(0.05, 0.05, 4, 6)
 }
 
 function Hoop({ x, z, rot }: { x: number; z: number; rot: number }) {
@@ -651,26 +674,25 @@ function Hoop({ x, z, rot }: { x: number; z: number; rot: number }) {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Terraced concrete seating steps at the big pond                     */
-/* ------------------------------------------------------------------ */
+/* ---------------- террасные ступени у пруда ---------------- */
 
-export function PondTerraces() {
+export function PondTerraces({ seg }: { seg: SegModel }) {
   const geo = useMemo(() => {
+    const pond = seg.ponds[0]
+    if (!pond) return null
     const parts: THREE.BufferGeometry[] = []
-    const cx = 14
-    const cz = 300
     for (let step = 0; step < 3; step++) {
       const pts: Pt[] = []
       for (let a = Math.PI * 0.75; a <= Math.PI * 1.45; a += 0.06) {
         const r = 1.04 + step * 0.16
-        pts.push({ x: cx + Math.cos(a) * 12 * r, z: cz + Math.sin(a) * 26 * 0.5 * r })
+        pts.push({ x: pond.cx + Math.cos(a) * pond.rx * r, z: pond.cz + Math.sin(a) * pond.rz * r })
       }
       const yTop = WATER_LEVEL + 0.32 + step * 0.3
       parts.push(wallGeometry(pts, 1.4, 0.28, () => yTop - 0.28, 2))
     }
     return mergeGeometries(parts, false)!
-  }, [])
+  }, [seg])
+  if (!geo) return null
   return (
     <mesh geometry={geo} castShadow receiveShadow>
       <meshStandardMaterial color="#b9b3a8" roughness={0.9} />
@@ -678,39 +700,35 @@ export function PondTerraces() {
   )
 }
 
-/* ------------------------------------------------------------------ */
-/* Entrance bollards with warm light rings                             */
-/* ------------------------------------------------------------------ */
+/* ---------------- болларды входов ---------------- */
 
-export function Bollards() {
+export function Bollards({ seg }: { seg: SegModel }) {
   const night = useTour((s) => s.night)
   const matRef = useRef<THREE.MeshStandardMaterial>(null!)
   const spots = useMemo(() => {
     const res: [number, number][] = []
-    for (let i = 0; i < 8; i++) res.push([pathXAt(4) - 11 + i * 3.2, 17])
-    for (let i = 0; i < 6; i++) res.push([pathXAt(LENGTH - 4) - 8 + i * 3.2, LENGTH - 16])
+    const a = promAt(seg, 6)
+    const b = promAt(seg, seg.lengthM - 6)
+    for (let i = 0; i < 7; i++) res.push([a.x, a.z - 9 + i * 3])
+    for (let i = 0; i < 7; i++) res.push([b.x, b.z - 9 + i * 3])
     return res
-  }, [])
+  }, [seg])
   const bodyRef = useRef<THREE.InstancedMesh>(null!)
   const ringRef = useRef<THREE.InstancedMesh>(null!)
   useLayoutEffect(() => {
     const m = new THREE.Matrix4()
     spots.forEach(([bx, bz], i) => {
       m.identity()
-      m.setPosition(bx, heightAt(bx, bz), bz)
+      m.setPosition(bx, heightAt(seg, bx, bz), bz)
       bodyRef.current.setMatrixAt(i, m)
       ringRef.current.setMatrixAt(i, m)
     })
     bodyRef.current.instanceMatrix.needsUpdate = true
     ringRef.current.instanceMatrix.needsUpdate = true
-  }, [spots])
+  }, [spots, seg])
   useFrame((_, delta) => {
     if (matRef.current)
-      matRef.current.emissiveIntensity = THREE.MathUtils.lerp(
-        matRef.current.emissiveIntensity,
-        night ? 2.4 : 0.15,
-        Math.min(1, delta * 2),
-      )
+      matRef.current.emissiveIntensity = THREE.MathUtils.lerp(matRef.current.emissiveIntensity, night ? 2.4 : 0.15, Math.min(1, delta * 2))
   })
   return (
     <group>
@@ -735,17 +753,48 @@ function bollardRingGeo() {
   return g
 }
 
-export default function Props() {
+/* ---------------- порталы между этапами ---------------- */
+
+export function Portals({ seg }: { seg: SegModel }) {
+  const matRef = useRef<THREE.MeshBasicMaterial>(null!)
+  useFrame((state) => {
+    if (matRef.current) matRef.current.opacity = 0.35 + Math.sin(state.clock.elapsedTime * 2.2) * 0.15
+  })
   return (
     <group>
-      <Lamps />
-      <Benches />
-      <Stela />
-      <Kulan />
-      <PlayProps />
-      <Court />
-      <PondTerraces />
-      <Bollards />
+      {seg.portals.map((p) => {
+        const y = heightAt(seg, p.x, p.z)
+        return (
+          <group key={p.to + p.x} position={[p.x, y, p.z]}>
+            <mesh position={[0, 1.6, 0]}>
+              <torusGeometry args={[1.9, 0.1, 10, 40]} />
+              <meshStandardMaterial color="#4CAF50" emissive="#4CAF50" emissiveIntensity={1.6} roughness={0.4} />
+            </mesh>
+            <mesh position={[0, 1.6, 0]}>
+              <circleGeometry args={[1.8, 32]} />
+              <meshBasicMaterial ref={matRef} color="#8ff2a0" transparent opacity={0.35} side={THREE.DoubleSide} depthWrite={false} />
+            </mesh>
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
+export default function Props({ segId }: { segId: keyof typeof SEGMENTS }) {
+  const seg = SEGMENTS[segId]
+  return (
+    <group>
+      <Lamps seg={seg} />
+      <Benches seg={seg} />
+      <Stela seg={seg} />
+      <Kulan seg={seg} />
+      <PlayProps seg={seg} />
+      <Court seg={seg} />
+      <PondTerraces seg={seg} />
+      <Bollards seg={seg} />
+      <Portals seg={seg} />
+      {seg.id !== 's1' && <Stage2Props seg={seg} />}
     </group>
   )
 }

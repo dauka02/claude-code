@@ -15,6 +15,7 @@ import { useTour } from './store'
 
 export default function App() {
   const quality = useTour((s) => s.quality)
+  const stage = useTour((s) => s.stage)
   return (
     <div className="app">
       <Canvas
@@ -26,12 +27,15 @@ export default function App() {
         <SkyAndFog />
         <Lights />
         <Suspense fallback={null}>
-          <Boulevard />
-          <Vegetation />
-          <Water />
-          <Buildings />
-          <Props />
-          <InfoPoints />
+          {/* активен один сегмент за раз — стриминг ради fps */}
+          <group key={stage}>
+            <Boulevard segId={stage} />
+            <Vegetation segId={stage} />
+            <Water segId={stage} />
+            <Buildings segId={stage} />
+            <Props segId={stage} />
+            <InfoPoints segId={stage} />
+          </group>
         </Suspense>
         <Controls />
         <Effects />
