@@ -1,0 +1,214 @@
+:root {
+  --accent: #e07830;
+  --ink: #23281f;
+  --card: rgba(252, 250, 244, 0.94);
+  font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #171a14;
+  color: var(--ink);
+}
+.app {
+  position: fixed;
+  inset: 0;
+}
+
+/* старт/лоадер */
+.overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(165deg, rgba(26, 30, 20, 0.62), rgba(14, 16, 10, 0.85));
+  backdrop-filter: blur(3px);
+  z-index: 30;
+}
+.start-card {
+  max-width: 620px;
+  margin: 16px;
+  padding: 44px 48px;
+  background: var(--card);
+  border-radius: 18px;
+  text-align: center;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+.brand {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.start-card h1 {
+  font-size: 25px;
+  line-height: 1.25;
+  margin-bottom: 10px;
+}
+.start-card .sub {
+  font-size: 13.5px;
+  color: #5c6154;
+  margin-bottom: 20px;
+}
+.help-box {
+  font-size: 13px;
+  color: #46503e;
+  background: #f0efe6;
+  border-radius: 12px;
+  padding: 13px 16px;
+  margin-bottom: 24px;
+}
+.btn {
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: none;
+  border-radius: 12px;
+  padding: 14px 44px;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+/* HUD */
+.hud {
+  position: fixed;
+  top: 12px;
+  left: 14px;
+  z-index: 20;
+}
+.logo {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  margin-bottom: 8px;
+}
+.mode {
+  display: flex;
+  gap: 6px;
+}
+.mode button,
+.mode select {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 7px 11px;
+  border: none;
+  border-radius: 9px;
+  background: var(--card);
+  cursor: pointer;
+}
+.mode button.active {
+  background: var(--accent);
+  color: #fff;
+}
+.help {
+  margin-top: 8px;
+  max-width: 420px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #fff;
+  background: rgba(24, 28, 18, 0.62);
+  padding: 9px 12px;
+  border-radius: 9px;
+}
+
+/* титры кварталов */
+.quarter-title {
+  position: fixed;
+  top: 16vh;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  z-index: 18;
+  pointer-events: none;
+  animation: qfade 3s ease forwards;
+}
+.qt-ru {
+  font-size: 40px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+}
+.qt-en {
+  font-size: 15px;
+  color: #f3e9d2;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6);
+}
+@keyframes qfade {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  12% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* POI */
+.poi-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  width: min(430px, calc(100vw - 32px));
+  background: var(--card);
+  border-radius: 14px;
+  padding: 16px 20px;
+  z-index: 16;
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.4);
+}
+.poi-accent {
+  width: 34px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  margin-bottom: 9px;
+}
+.poi-panel h3 {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.poi-panel p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #454d3e;
+}
+
+/* миникарта */
+.minimap {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 16;
+  background: rgba(18, 22, 14, 0.55);
+  border-radius: 10px;
+  padding: 6px;
+  cursor: pointer;
+  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.4));
+}
