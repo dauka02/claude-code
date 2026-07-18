@@ -117,15 +117,41 @@ pts.roads.crossBlvdAtM.forEach((m: number, i: number) => {
   roads.push({ id: `xblvd${i}`, kind: 'boulevard', width: 15, points: [perp(m, -520), perp(m, 520)] })
 })
 
-/* аллея: главная прогулочная дорожка (серпантин в ленте) + вело */
+/* аллея: ПЕРЕПЛЕТАЮЩАЯСЯ система лент (рендеры стр.7-10):
+   пешеходная и вело идут противофазными волнами и пересекаются каждые ~600 м,
+   между нитями образуются острова посадок; беговая вьётся вокруг пары чаще.
+   + второстепенные тропинки-связки между лентами. */
+const oWalk = (m: number) => {
+  const w = bandHalf(m)
+  return Math.sin(m * 0.0016 + 0.8) * w * 0.22 + Math.sin(m * 0.0052) * w * 0.3
+}
+const oBike = (m: number) => {
+  const w = bandHalf(m)
+  return Math.sin(m * 0.0016 + 0.8) * w * 0.22 - Math.sin(m * 0.0052) * w * 0.3 + Math.sin(m * 0.0021 + 1.2) * w * 0.1
+}
+const oRun = (m: number) => {
+  const w = bandHalf(m)
+  return Math.sin(m * 0.0016 + 0.8) * w * 0.2 + Math.sin(m * 0.0087 + 2.6) * w * 0.42
+}
 const walk: Pt[] = []
 const bike: Pt[] = []
 const run: Pt[] = []
-for (let m = 0; m <= L; m += 90) {
-  const w = bandHalf(m)
-  walk.push(perp(m, Math.sin(m * 0.004) * w * 0.45))
-  bike.push(perp(m, Math.sin(m * 0.0028 + 2.1) * w * 0.3 - w * 0.18))
-  run.push(perp(m, Math.sin(m * 0.0035 + 4.4) * w * 0.42 + w * 0.22))
+for (let m = 0; m <= L; m += 45) {
+  walk.push(perp(m, oWalk(m)))
+  bike.push(perp(m, oBike(m)))
+  run.push(perp(m, oRun(m)))
+}
+/* связки-тропинки: диагонали между пешеходной и вело/беговой */
+const paths2: Pt[][] = []
+for (let m = 300; m < L - 260; m += 370) {
+  const target = (Math.floor(m / 370) % 2 ? oBike : oRun) as (m: number) => number
+  const seg: Pt[] = []
+  for (let k = 0; k <= 4; k++) {
+    const t = k / 4
+    const mm = m + t * 150
+    seg.push(perp(mm, oWalk(m) * (1 - t) + target(m + 150) * t))
+  }
+  paths2.push(seg)
 }
 
 /* LRT */
@@ -163,7 +189,7 @@ const out = {
   quarters,
   sitePoly,
   roads,
-  alley: { walk, bike, run },
+  alley: { walk, bike, run, paths2 },
   lrt: { points: lrtPts, stopsAtM: pts.lrt.stopsAtM, stationAtM: pts.lrt.stationAtM, railCrossAtM: pts.lrt.railCrossAtM, offsetM: pts.lrt.offsetM },
   river: { points: river, width: pts.riverWidthM },
   lakes,

@@ -169,8 +169,9 @@ function MeadowClumps({ variant }: { variant: number }) {
       let px: number
       let pz: number
       if (rnd() < 0.62) {
-        // кромки дорожек: ленты многолетников 1.8–7 м от кромки
-        const seg = walk[Math.floor(rnd() * (walk.length - 1))]
+        // кромки дорожек и острова между нитями: ленты многолетников
+        const src = rnd() < 0.55 ? walk : ALM.alley.bike
+        const seg = src[Math.floor(rnd() * (src.length - 1))]
         const off = (rnd() < 0.5 ? -1 : 1) * (3.6 + rnd() * 5.5)
         px = seg[0] + off + (rnd() * 2 - 1) * 6
         pz = seg[1] + (rnd() * 2 - 1) * 14

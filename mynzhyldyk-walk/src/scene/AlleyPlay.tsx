@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
-import { heightAt, inWater, nearLine, perp } from '../data/geo'
+import { bandHalf, heightAt, inWater, nearLine, perp, spineAt } from '../data/geo'
 import { mkWood } from './assets'
 
 /**
@@ -67,6 +67,42 @@ function slideGeo(): THREE.BufferGeometry {
   return s
 }
 
+/** Подпорные ступени-амфитеатры на склонах берм, лицом к аллее (A3). */
+function BermSteps() {
+  const geo = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = []
+    for (let k = 0; k < 14; k++) {
+      const m = 420 + k * 440
+      const side = k % 2 ? 1 : -1
+      const o = side * bandHalf(m) * 0.66
+      const [cx, cz] = perp(m, o)
+      if (inWater(cx, cz) || nearLine(cx, cz, 2)) continue
+      const s = spineAt(m)
+      const rot = -Math.atan2(s.dz, s.dx)
+      const base = heightAt(cx, cz)
+      for (let st = 0; st < 3; st++) {
+        const g = new THREE.BoxGeometry(13 - st * 1.6, 0.42, 1.15)
+        g.rotateY(rot)
+        // ступени поднимаются по склону бермы от аллеи
+        const off = side * st * 1.35
+        const px = cx - s.dz * off * -1
+        const bx = cx + -s.dz * off
+        const bz = cz + s.dx * off
+        void px
+        g.translate(bx, base * (1 - st * 0.12) + 0.21 + st * 0.44, bz)
+        parts.push(g)
+      }
+    }
+    return parts.length ? mergeGeometries(parts, false)! : null
+  }, [])
+  if (!geo) return null
+  return (
+    <mesh geometry={geo} castShadow receiveShadow>
+      <meshStandardMaterial color="#c2bcae" roughness={0.9} />
+    </mesh>
+  )
+}
+
 export default function AlleyPlay() {
   const wood = useMemo(mkWood, [])
   const site = useMemo(timberSite, [])
@@ -104,6 +140,7 @@ export default function AlleyPlay() {
       <instancedMesh ref={slideRef} args={[slide, undefined, spots.length]} frustumCulled={false}>
         <meshStandardMaterial color="#b8483a" roughness={0.55} side={THREE.DoubleSide} />
       </instancedMesh>
+      <BermSteps />
     </group>
   )
 }
