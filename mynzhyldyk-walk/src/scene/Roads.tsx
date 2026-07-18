@@ -18,6 +18,7 @@ export default function Roads() {
     const road: THREE.BufferGeometry[] = []
     const side: THREE.BufferGeometry[] = []
     const marks: THREE.BufferGeometry[] = []
+    const swales: THREE.BufferGeometry[] = []
     for (const r of ALM.roads) {
       const pts = resample(r.points, 22)
       road.push(ribbon(pts, r.width, yOf, 8, 0.05))
@@ -45,6 +46,11 @@ export default function Roads() {
       void shift
       side.push(ribbon(shiftP(off), 4, yOf, 4, 0.06))
       side.push(ribbon(shiftP(-off), 4, yOf, 4, 0.06))
+      // канавы-дождевые сады (SuDS) вдоль бульваров — тёмно-зелёные ленты
+      if (r.kind === 'boulevard') {
+        swales.push(ribbon(shiftP(off + 3.6), 2.6, yOf, 4, 0.03))
+        swales.push(ribbon(shiftP(-off - 3.6), 2.6, yOf, 4, 0.03))
+      }
       // осевая пунктирная разметка
       for (let i = 0; i < pts.length - 1; i += 2) {
         const [x0, z0] = pts[i]
@@ -60,6 +66,7 @@ export default function Roads() {
       road: mergeGeometries(road, false)!,
       side: mergeGeometries(side, false)!,
       marks: mergeGeometries(marks, false)!,
+      swales: mergeGeometries(swales, false)!,
     }
   }, [])
 
@@ -81,6 +88,9 @@ export default function Roads() {
       <mesh geometry={data.marks}>
         <meshStandardMaterial color="#cfd2cd" roughness={0.8} />
       </mesh>
+      <mesh geometry={data.swales} receiveShadow>
+        <meshStandardMaterial color="#3e5c34" roughness={1} />
+      </mesh>
       <mesh geometry={alley.walk} receiveShadow>
         <meshStandardMaterial map={walkTex} roughness={0.92} />
       </mesh>
@@ -88,7 +98,7 @@ export default function Roads() {
         <meshStandardMaterial map={bikeTex} roughness={0.95} />
       </mesh>
       <mesh geometry={alley.run} receiveShadow>
-        <meshStandardMaterial color="#c96f35" roughness={0.97} />
+        <meshStandardMaterial color="#4a7fa6" roughness={0.97} />
       </mesh>
     </group>
   )

@@ -6,6 +6,7 @@ import Roads from './scene/Roads'
 import LRT from './scene/LRT'
 import Buildings from './scene/Buildings'
 import Vegetation from './scene/Vegetation'
+import AlleyPlay from './scene/AlleyPlay'
 import Life from './scene/Life'
 import Quarters from './quarters/Quarters'
 import { Effects, Sky, Sun } from './scene/Atmo'
@@ -37,6 +38,7 @@ export default function App() {
           <LRT />
           <Buildings />
           <Vegetation />
+          <AlleyPlay />
           <Life />
           <Quarters />
         </Suspense>

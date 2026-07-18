@@ -4,7 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { PointerLockControls } from '@react-three/drei'
 import type { PointerLockControls as PLCImpl } from 'three-stdlib'
 import { ALM, arcOf, heightAt, inWater, quarterAt, spineAt, L } from '../data/geo'
-import { playerPos, teleport, useApp } from '../store/useAppStore'
+import { DEBUG, playerPos, teleport, useApp } from '../store/useAppStore'
 
 const EYE = 1.7
 const keys = new Set<string>()
@@ -28,6 +28,13 @@ export default function Controls() {
     const s = spineAt(40)
     camera.position.set(s.x, heightAt(s.x, s.z) + EYE, s.z)
     camera.lookAt(s.x + s.dx * 50, EYE, s.z + s.dz * 50)
+    if (DEBUG)
+      (window as unknown as { __tp: (x: number, y: number, z: number, lx?: number, lz?: number) => void }).__tp = (
+        x, y, z, lx, lz,
+      ) => {
+        camera.position.set(x, y, z)
+        camera.lookAt(lx ?? x, 0, lz ?? z - 150)
+      }
   }, [camera])
 
   useEffect(() => {

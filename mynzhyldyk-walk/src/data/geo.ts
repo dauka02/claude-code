@@ -182,6 +182,15 @@ export function heightAt(x: number, z: number): number {
     const d = Math.hypot(x - lf.x, z - lf.z) / lf.r
     if (d < 1.25) h += lf.h * Math.exp(-d * d * 2.8)
   }
+  // бермы линейного парка: мягкие гребни по флангам ленты (рендеры стр.9-10)
+  const arc = arcOf(x, z)
+  const bh = bandHalf(arc.m)
+  if (arc.d < bh * 1.1 && !inLake(x, z, 30)) {
+    const t = arc.d / bh
+    const ridge = Math.exp(-((t - 0.74) * (t - 0.74)) / 0.014)
+    const mod = 0.5 + 0.5 * Math.sin(arc.m * 0.012 + Math.sin(arc.m * 0.0041) * 2.3)
+    h += ridge * (0.8 + mod * 1.7)
+  }
   // русло реки и чаши озёр
   const rd = riverDist(x, z)
   const rw = ALM.river.width / 2

@@ -22,6 +22,10 @@ export const TEX = {
   tree3: '/assets/textures/tree_willow.png',
   tree4: '/assets/textures/tree_maple.png',
   tree5: '/assets/textures/tree_apple.png',
+  tree6: '/assets/textures/tree_blossom.png',
+  meadow0: '/assets/textures/meadow_purple.png',
+  meadow1: '/assets/textures/meadow_pink.png',
+  meadow2: '/assets/textures/meadow_grass.png',
 } as const
 
 const loader = new THREE.TextureLoader()
@@ -269,6 +273,7 @@ export function fbTree(species: number) {
     ['#6b5a44', '#8fa876', 0.3, 0.72], // ива: плакучая
     ['#5f4f3c', '#5d8040', 0.3, 0.66], // клён
     ['#6b5a48', '#e8dce4', 0.35, 0.5], // яблоня в цвету
+    ['#6b5648', '#e8a4c4', 0.32, 0.6], // цветущая розовая (сакура/яблоня Недзвецкого)
   ]
   const [trunkC, crownC, trunkH, crownS] = palette[species]
   return () => {
@@ -316,6 +321,79 @@ function shade(hex: string, k: number): string {
   const g = ((n >> 8) & 255) * k
   const b = (n & 255) * k
   return `rgb(${r | 0},${g | 0},${b | 0})`
+}
+
+/** Куртина луговых многолетников (fallback спрайта): 0 шалфей, 1 эхинацея+ромашки, 2 злаки. */
+export function fbMeadowClump(variant: number) {
+  return () => {
+    const t = canvas(256, 256, (c) => {
+      c.clearRect(0, 0, 256, 256)
+      srand(140 + variant * 29)
+      // стебли
+      for (let i = 0; i < 26; i++) {
+        const x = 24 + rnd() * 208
+        c.strokeStyle = `rgba(${70 + rnd() * 40},${105 + rnd() * 40},${50 + rnd() * 25},0.95)`
+        c.lineWidth = 2 + rnd() * 1.6
+        c.beginPath()
+        c.moveTo(x, 256)
+        c.quadraticCurveTo(x + rnd() * 22 - 11, 170, x + rnd() * 34 - 17, 70 + rnd() * 70)
+        c.stroke()
+      }
+      if (variant === 0) {
+        // свечи шалфея
+        for (let i = 0; i < 20; i++) {
+          const x = 30 + rnd() * 196
+          const y = 60 + rnd() * 90
+          const h = 34 + rnd() * 40
+          for (let s = 0; s < h; s += 4) {
+            c.fillStyle = `rgba(${104 + rnd() * 40},${66 + rnd() * 30},${168 + rnd() * 50},0.96)`
+            c.beginPath()
+            c.arc(x + rnd() * 5 - 2.5, y + s, 3.2 + rnd() * 1.6, 0, 6.28)
+            c.fill()
+          }
+        }
+      } else if (variant === 1) {
+        // эхинацея + ромашки
+        for (let i = 0; i < 18; i++) {
+          const x = 28 + rnd() * 200
+          const y = 66 + rnd() * 96
+          const r = 8 + rnd() * 6
+          const pink = rnd() < 0.62
+          c.fillStyle = pink ? `rgba(${212 + rnd() * 30},${118 + rnd() * 30},${158 + rnd() * 30},0.97)` : 'rgba(245,242,232,0.97)'
+          for (let p = 0; p < 8; p++) {
+            const a = (p / 8) * 6.28 + rnd()
+            c.beginPath()
+            c.ellipse(x + Math.cos(a) * r, y + Math.sin(a) * r * 0.8, r * 0.62, r * 0.3, a, 0, 6.28)
+            c.fill()
+          }
+          c.fillStyle = pink ? '#a3541e' : '#d8a020'
+          c.beginPath()
+          c.arc(x, y, r * 0.38, 0, 6.28)
+          c.fill()
+        }
+      } else {
+        // злаки-мискантус с метёлками
+        for (let i = 0; i < 30; i++) {
+          const x = 26 + rnd() * 204
+          c.strokeStyle = `rgba(${168 + rnd() * 50},${146 + rnd() * 40},${86 + rnd() * 30},0.9)`
+          c.lineWidth = 2
+          c.beginPath()
+          c.moveTo(x, 256)
+          const tx = x + rnd() * 44 - 22
+          const ty = 46 + rnd() * 60
+          c.quadraticCurveTo(x + rnd() * 20 - 10, 150, tx, ty)
+          c.stroke()
+          c.fillStyle = `rgba(${218 + rnd() * 30},${198 + rnd() * 30},${150 + rnd() * 30},0.85)`
+          for (let s = 0; s < 7; s++) {
+            c.beginPath()
+            c.ellipse(tx + rnd() * 8 - 4, ty + s * 4, 3.4, 1.8, rnd(), 0, 6.28)
+            c.fill()
+          }
+        }
+      }
+    })
+    return t
+  }
 }
 
 export const mkAsphalt = (tone = '#54565a') =>
