@@ -15,7 +15,7 @@ export const ALM = alm as unknown as {
   quarters: { id: string; fromM: number; toM: number }[]
   sitePoly: Pt[]
   roads: { id: string; kind: 'city' | 'boulevard' | 'district'; width: number; points: Pt[] }[]
-  alley: { walk: Pt[]; bike: Pt[]; run: Pt[] }
+  alley: { walk: Pt[]; bike: Pt[]; run: Pt[]; paths2: Pt[][] }
   lrt: { points: Pt[]; stopsAtM: number[]; stationAtM: number; railCrossAtM: number; offsetM: number }
   river: { points: Pt[]; width: number }
   lakes: { id: string; x: number; z: number; rx: number; rz: number; rot: number }[]
@@ -107,6 +107,7 @@ for (const r of ALM.roads) addLine(r.points, r.width / 2, 'road')
 addLine(ALM.alley.walk, 2.5, 'path')
 addLine(ALM.alley.bike, 1.6, 'path')
 addLine(ALM.alley.run, 1.3, 'path')
+for (const p of ALM.alley.paths2) addLine(p, 1.1, 'path')
 for (const s of ALM.suds) addLine(s, 3, 'suds')
 
 export function nearLine(x: number, z: number, extra = 0, kinds?: string[]): boolean {
@@ -213,8 +214,10 @@ export function heightAt(x: number, z: number): number {
     const e = nx * nx + nz * nz
     if (e < 1.4) h -= 3.0 * Math.max(0, 1.1 - e) ** 1.3
   }
-  // ровно под дорогами/дорожками
-  if (nearLine(x, z, 6)) h *= 0.12
+  // дороги — широкая ровная полоса; дорожки — узкая, бермы подходят вплотную
+  if (nearLine(x, z, 7, ['road', 'suds'])) h *= 0.1
+  else if (nearLine(x, z, 1.4, ['path'])) h *= 0.1
+  else if (nearLine(x, z, 6.5, ['path'])) h *= 0.45
   // привокзальная зона ровная
   if (x > 4100 && x < 4750 && z > -300 && z < 60) h *= 0.1
   return h

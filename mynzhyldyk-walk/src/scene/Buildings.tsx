@@ -74,7 +74,8 @@ function layout(): { blocks: Block[]; context: Block[] } {
     const s = spineAt(mc)
     const rot = -Math.atan2(s.dz, s.dx)
     for (const side of [-1, 1]) {
-      for (const [ri, rowOff] of [64, 190].entries()) {
+      // первая линия — сразу за тротуаром бульвара (фронт и кафе смотрят в парк)
+      for (const [ri, rowOff] of [51, 132].entries()) {
         if (rand() < 0.1) continue
         const depth = 40 + rand() * 8 // глубина двора
         const oFront = side * (bandHalf(mc) + rowOff)

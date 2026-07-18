@@ -74,7 +74,14 @@ export default function Roads() {
     const walk = ribbon(resample(ALM.alley.walk, 14), 4.5, yOf, 5, 0.07)
     const bike = ribbon(resample(ALM.alley.bike, 14), 3, yOf, 4, 0.06)
     const run = ribbon(resample(ALM.alley.run, 14), 2.4, yOf, 4, 0.06)
-    return { walk, bike, run }
+    const links = mergeGeometries(
+      ALM.alley.paths2.map((p) => {
+        const g = ribbon(resample(p, 10), 1.8, yOf, 3, 0.055)
+        return g.index ? g.toNonIndexed() : g
+      }),
+      false,
+    )!
+    return { walk, bike, run, links }
   }, [])
 
   return (
@@ -99,6 +106,9 @@ export default function Roads() {
       </mesh>
       <mesh geometry={alley.run} receiveShadow>
         <meshStandardMaterial color="#4a7fa6" roughness={0.97} />
+      </mesh>
+      <mesh geometry={alley.links} receiveShadow>
+        <meshStandardMaterial map={walkTex} roughness={0.92} color="#d8d2c2" />
       </mesh>
     </group>
   )
