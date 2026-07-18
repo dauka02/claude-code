@@ -1,7 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": null,
-  "installCommand": "npm --prefix mynzhyldyk-walk install",
-  "buildCommand": "cd mynzhyldyk-walk && (node scripts/fetch-assets.mjs || true) && npm run build",
-  "outputDirectory": "mynzhyldyk-walk/dist"
-}
