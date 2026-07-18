@@ -27,6 +27,10 @@
 | `textures/tree_elm.png` | `89c2f6a3-bc7e-4085-922e-2c102e206f83` | Спрайт: вяз |
 | `textures/tree_maple.png` | `11242e31-4df9-42a5-be4e-d0ac5f9eec4f` | Спрайт: клён |
 | `textures/tree_apple.png` | `5ed51db3-a69c-4d43-954e-0288ea5525bc` | Спрайт: яблоня Сиверса |
+| `textures/meadow_purple.png` | `d2715dec-43dc-4c89-b16d-ed92ff4eca61` | Куртина: шалфей + ковыль (луга аллеи) |
+| `textures/meadow_pink.png` | `2bdae15f-8254-41ef-ad1d-5ec964870ff2` | Куртина: эхинацея + ромашки |
+| `textures/meadow_grass.png` | `dd64bbd9-6284-471a-a0fd-ae217ed27cc0` | Куртина: мискантус (злаки) |
+| `textures/tree_blossom.png` | `55d55e59-5577-4cc5-bb16-746a791ae5a8` | Спрайт: розовое цветущее дерево |
 
 ## 3D-модели (Meshy image-to-3D)
 
@@ -34,6 +38,7 @@
 |---|---|---|---|
 | `models/pavilion.glb` | `c9f17ec6-bba7-415b-9437-d17cf0a92559` | `492bd3b9-9664-4eab-b2da-55200e77137c` | Павильон-кафе у Lake of Galaxy (Central Park) |
 | `models/diamond_canopy.glb` | `5f6d0916-1a56-4709-9756-c622db742d03` | `dd034809-e268-45e1-aca6-48f27a6baa3c` | Ромбо-навес на площади Diamond Village (Hub) |
+| `models/snow_leopard.glb` | `a5ec6b9e-cdce-4468-a6f9-c8585f90c038` | `9457a44f-4b71-4b0e-af04-d4a7d2abc961` | Снежный барс — игровая структура (Привокзальный парк) |
 
 GLB rawUrl:
 

@@ -46,11 +46,19 @@ function Lamps() {
     return mergeGeometries([pole, arm1, h1, h2], false)!
   }, [])
   const parkGeo = useMemo(() => {
-    const pole = new THREE.CylinderGeometry(0.06, 0.09, 4, 6)
-    pole.translate(0, 2, 0)
-    const head = new THREE.CylinderGeometry(0.16, 0.2, 0.5, 8)
-    head.translate(0, 4.15, 0)
-    return mergeGeometries([pole, head], false)!
+    // чёрная Y-мачта (рендеры линейного парка): столб + два наклонных рожка
+    const pole = new THREE.BoxGeometry(0.14, 4.6, 0.14)
+    pole.translate(0, 2.3, 0)
+    const armL = new THREE.BoxGeometry(0.11, 1.5, 0.11)
+    armL.rotateZ(0.55)
+    armL.translate(-0.42, 5.15, 0)
+    const armR = armL.clone()
+    armR.rotateY(Math.PI)
+    const hL = new THREE.BoxGeometry(0.34, 0.12, 0.2)
+    hL.translate(-0.82, 5.85, 0)
+    const hR = hL.clone()
+    hR.rotateY(Math.PI)
+    return mergeGeometries([pole, armL, armR, hL, hR], false)!
   }, [])
 
   const dblRef = useRef<THREE.InstancedMesh>(null!)
@@ -77,7 +85,7 @@ function Lamps() {
         <meshStandardMaterial color="#3d4145" roughness={0.6} metalness={0.5} />
       </instancedMesh>
       <instancedMesh ref={parkRef} args={[parkGeo, undefined, data.park.length]} frustumCulled={false}>
-        <meshStandardMaterial color="#4a4640" roughness={0.6} metalness={0.4} />
+        <meshStandardMaterial color="#26282b" roughness={0.55} metalness={0.45} />
       </instancedMesh>
     </group>
   )

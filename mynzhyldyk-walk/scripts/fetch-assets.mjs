@@ -28,9 +28,15 @@ const ASSETS = {
   'public/assets/textures/tree_elm.png': `${IMG}/hf_20260711_100900_89c2f6a3-bc7e-4085-922e-2c102e206f83.png`,
   'public/assets/textures/tree_maple.png': `${IMG}/hf_20260711_100900_11242e31-4df9-42a5-be4e-d0ac5f9eec4f.png`,
   'public/assets/textures/tree_apple.png': `${IMG}/hf_20260711_100901_5ed51db3-a69c-4d43-954e-0288ea5525bc.png`,
-  // GLB МАФы (Meshy image_to_3d): павильон-кафе и ромбо-навес; при 404 — фолбэки.
+  // v2 (детализация по русской презентации): луга, цветущее дерево
+  'public/assets/textures/meadow_purple.png': `${IMG}/hf_20260718_140956_d2715dec-43dc-4c89-b16d-ed92ff4eca61.png`,
+  'public/assets/textures/meadow_pink.png': `${IMG}/hf_20260718_141002_2bdae15f-8254-41ef-ad1d-5ec964870ff2.png`,
+  'public/assets/textures/meadow_grass.png': `${IMG}/hf_20260718_141010_dd64bbd9-6284-471a-a0fd-ae217ed27cc0.png`,
+  'public/assets/textures/tree_blossom.png': `${IMG}/hf_20260718_141014_55d55e59-5577-4cc5-bb16-746a791ae5a8.png`,
+  // GLB МАФы (Meshy image_to_3d): павильон-кафе, ромбо-навес, снежный барс; при 404 — фолбэки.
   'public/assets/models/pavilion.glb': `${GLB}/cb789d9a-a1ba-40a7-bcf6-4e2c83180ced.glb`,
   'public/assets/models/diamond_canopy.glb': `${GLB}/e4f9ab56-7e2a-4767-a6ed-eca2cf4fd2a9.glb`,
+  'public/assets/models/snow_leopard.glb': `${GLB}/cc4c3078-c0a8-4e25-9f55-7aac8bc2bb59.glb`,
 }
 
 let ok = 0
