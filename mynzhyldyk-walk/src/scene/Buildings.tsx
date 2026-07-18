@@ -61,36 +61,50 @@ function layout(): { blocks: Block[]; context: Block[] } {
     return v
   }
 
+  // ПЕРИМЕТРАЛЬНЫЕ КВАРТАЛЫ (мастерплан: замкнутые дворы, сплошной фронт улиц):
+  // каждый квартал = передняя + задняя пластины вдоль оси + две боковые,
+  // с разрывами-арками; угловые башни в хаб/вокзальной зоне.
   for (let m = 90; m < L - 90; ) {
-    const len = 55 + rand() * 45
+    const len = 78 + rand() * 34
     if (nearCross(m + len / 2)) {
       m += 70
       continue
     }
+    const mc = m + len / 2
+    const s = spineAt(mc)
+    const rot = -Math.atan2(s.dz, s.dx)
     for (const side of [-1, 1]) {
-      const rows = side < 0 ? [64, 178, 300] : [64, 178]
-      for (const [ri, rowOff] of rows.entries()) {
-        if (rand() < 0.22) continue
-        const o = side * (bandHalf(m + len / 2) + rowOff + rand() * 18)
-        const [x, z] = perp(m + len / 2, o)
-        if (inLake(x, z, 30) || riverDist(x, z) < 90) continue
-        // южные аннексы — парки, не застраиваем в них первую линию юга у Hub/Station? аннексы дальше 470
-        const s = spineAt(m + len / 2)
+      for (const [ri, rowOff] of [64, 190].entries()) {
+        if (rand() < 0.1) continue
+        const depth = 40 + rand() * 8 // глубина двора
+        const oFront = side * (bandHalf(mc) + rowOff)
+        const oBack = oFront + side * depth
+        const [fx, fz] = perp(mc, oFront)
+        if (inLake(fx, fz, 30) || riverDist(fx, fz) < 90) continue
         const isTowerZone = (m > 3400 && m < 3950) || (m > 4100 && m < 4750)
-        const tower = isTowerZone && ri === 0 && rand() < 0.3
-        blocks.push({
-          x,
-          z,
-          rot: -Math.atan2(s.dz, s.dx),
-          len: tower ? 26 + rand() * 8 : len - 12,
-          dep: tower ? 26 + rand() * 8 : 15 + rand() * 6,
-          h: tower ? (18 + Math.floor(rand() * 8)) * 3 : (6 + Math.floor(rand() * 7)) * 3,
-          mat: tower ? 3 : Math.floor(rand() * 3),
-          tint: 0.82 + rand() * 0.3,
-        })
+        const mat = Math.floor(rand() * 3)
+        const baseH = (5 + Math.floor(rand() * 4)) * 3
+        // передняя пластина (активный фронт к аллее/улице)
+        blocks.push({ x: fx, z: fz, rot, len: len - 16, dep: 13, h: baseH + (rand() < 0.4 ? 3 : 0), mat, tint: 0.85 + rand() * 0.28 })
+        // задняя пластина
+        const [bx, bz] = perp(mc, oBack)
+        if (!inLake(bx, bz, 30) && riverDist(bx, bz) > 90)
+          blocks.push({ x: bx, z: bz, rot, len: len - 16, dep: 13, h: baseH - 3 + (rand() < 0.4 ? 3 : 0), mat: Math.floor(rand() * 3), tint: 0.85 + rand() * 0.28 })
+        // боковые пластины (с шансом разрыва-арки)
+        for (const e of [-1, 1]) {
+          if (rand() < 0.3) continue
+          const [sx, sz] = perp(mc + e * (len / 2 - 7), (oFront + oBack) / 2)
+          if (inLake(sx, sz, 30) || riverDist(sx, sz) < 90) continue
+          blocks.push({ x: sx, z: sz, rot: rot + Math.PI / 2, len: depth - 15, dep: 12, h: baseH - 3, mat: Math.floor(rand() * 3), tint: 0.85 + rand() * 0.28 })
+        }
+        // угловая башня
+        if (isTowerZone && ri === 0 && rand() < 0.4) {
+          const [tx, tz] = perp(mc - len / 2 + 14, oFront + side * 6)
+          blocks.push({ x: tx, z: tz, rot, len: 24 + rand() * 6, dep: 24 + rand() * 6, h: (16 + Math.floor(rand() * 9)) * 3, mat: 3, tint: 0.9 + rand() * 0.2 })
+        }
       }
     }
-    m += len + 16 + rand() * 22
+    m += len + 14 + rand() * 14
   }
   // context massing — дальняя периферия, серые объёмы
   for (let m = 0; m < L; m += 130) {

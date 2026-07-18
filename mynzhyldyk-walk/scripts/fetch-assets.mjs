@@ -13,7 +13,8 @@ const IMG = 'https://d8j0ntlcm91z4.cloudfront.net/user_34oyBf1C2JQ9p77OPjDAeczkR
 const GLB = 'https://d3u0tzju9qaucj.cloudfront.net/7d051b5a-7bfe-49fe-a484-24e7b3a9458a'
 
 const ASSETS = {
-  'public/assets/sky/steppe_sky.png': `${IMG}/hf_20260711_100821_d01b9ad4-253c-40af-ab04-2839c3256b8a.png`,
+  // дневное небо (v2 — согласовано с дневным светом сцены)
+  'public/assets/sky/steppe_sky.png': `${IMG}/hf_20260718_143946_c849f785-2636-4a1d-b7d7-f8ab5dd0a3f9.png`,
   'public/assets/textures/facade_brick.png': `${IMG}/hf_20260711_100823_0a6bd47d-1ba6-4797-92ca-616d8cfa048f.png`,
   'public/assets/textures/facade_stone.png': `${IMG}/hf_20260711_100825_b2b54eca-e230-441b-b931-77e0f333b1b3.png`,
   'public/assets/textures/facade_white.png': `${IMG}/hf_20260711_100827_7989d04b-fb13-41d1-b9a5-dc4fdfe24904.png`,

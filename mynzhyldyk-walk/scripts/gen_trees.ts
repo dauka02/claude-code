@@ -123,50 +123,115 @@ function put(x: number, z: number, s: number, sc: number) {
   SC.push(Math.round(sc * 100))
 }
 
-/* 1) лента аллеи — плотные группы */
-const TARGET_BAND = 9000
+/* 1) лента аллеи — РОЩИ-КЛАСТЕРЫ с луговыми полянами между ними
+   (мастерплан: группы деревьев + открытые луга, не равномерный посев) */
+const CLUSTERS = 520
 let guard = 0
-while (X.length < TARGET_BAND && guard++ < TARGET_BAND * 30) {
+let made = 0
+while (made < CLUSTERS && guard++ < CLUSTERS * 40) {
   const m = rand() * L
   const w = bandHalf(m)
-  const o = (rand() * 2 - 1) * (w - 4)
-  const [x, z] = perp(m, o)
-  if (blocked(x, z)) continue
-  // кластеризация: чаще у кромок ленты
-  if (rand() < 0.35 && Math.abs(o) < w * 0.4) continue
-  put(x, z, speciesFor(m), 0.75 + rand() * 0.6)
+  const co = (rand() * 2 - 1) * (w - 14)
+  const [cx, cz] = perp(m, co)
+  if (blocked(cx, cz)) continue
+  made++
+  const r = 7 + rand() * 15
+  const n = 5 + Math.floor(rand() * 14)
+  const dominant = speciesFor(m) // роща — преимущественно один вид
+  for (let k = 0; k < n; k++) {
+    const a = rand() * Math.PI * 2
+    const rr = Math.sqrt(rand()) * r
+    const x = cx + Math.cos(a) * rr
+    const z = cz + Math.sin(a) * rr
+    if (blocked(x, z)) continue
+    const sp = rand() < 0.75 ? dominant : speciesFor(m)
+    put(x, z, sp, 0.7 + rand() * 0.75)
+  }
 }
 
-/* 2) рядовые вдоль бульваров */
+/* 2) рядовые вдоль бульваров — ДВА ряда с каждой стороны, один вид, ровный шаг */
 for (const r of alm.roads) {
   if (r.kind !== 'boulevard') continue
+  const rowSpecies = rand() < 0.5 ? 2 : 4 // вяз или клён на весь бульвар
   for (let i = 0; i < r.points.length - 1; i++) {
     const [x0, z0] = r.points[i]
     const [x1, z1] = r.points[i + 1]
     const len = Math.hypot(x1 - x0, z1 - z0)
     const nx = -(z1 - z0) / len
     const nz = (x1 - x0) / len
-    for (let d = 6; d < len; d += 11 + rand() * 3) {
+    for (let d = 5; d < len; d += 9) {
+      for (const side of [-1, 1])
+        for (const row of [r.width / 2 + 4, r.width / 2 + 9.5]) {
+          const x = x0 + ((x1 - x0) * d) / len + nx * side * row
+          const z = z0 + ((z1 - z0) * d) / len + nz * side * row
+          if (blocked(x, z)) continue
+          put(x, z, rowSpecies, 0.92 + rand() * 0.22)
+        }
+    }
+  }
+}
+
+/* 2б) рядовые вдоль городских улиц — один ряд, шаг 12 */
+for (const r of alm.roads) {
+  if (r.kind !== 'city') continue
+  for (let i = 0; i < r.points.length - 1; i++) {
+    const [x0, z0] = r.points[i]
+    const [x1, z1] = r.points[i + 1]
+    const len = Math.hypot(x1 - x0, z1 - z0)
+    const nx = -(z1 - z0) / len
+    const nz = (x1 - x0) / len
+    for (let d = 8; d < len; d += 12) {
       for (const side of [-1, 1]) {
-        const x = x0 + ((x1 - x0) * d) / len + nx * side * (r.width / 2 + 4)
-        const z = z0 + ((z1 - z0) * d) / len + nz * side * (r.width / 2 + 4)
+        const x = x0 + ((x1 - x0) * d) / len + nx * side * (r.width / 2 + 4.5)
+        const z = z0 + ((z1 - z0) * d) / len + nz * side * (r.width / 2 + 4.5)
         if (blocked(x, z)) continue
-        put(x, z, 2 + (rand() < 0.3 ? 2 : 0), 0.8 + rand() * 0.35)
+        put(x, z, 2, 0.9 + rand() * 0.2)
       }
     }
   }
 }
 
-/* 3) контекст в кварталах (редкие дворовые) */
-const TARGET_CTX = 5000
+/* 3) дворы кварталов — РЕДКИЕ группки по 2-4 (мастерплан: дворы почти пустые) */
+const CTX_CLUSTERS = 420
 guard = 0
-while (X.length < TARGET_BAND + 4000 + TARGET_CTX && guard++ < TARGET_CTX * 40) {
+made = 0
+while (made < CTX_CLUSTERS && guard++ < CTX_CLUSTERS * 50) {
   const m = rand() * L
-  const o = (rand() < 0.5 ? -1 : 1) * (bandHalf(m) + 40 + rand() * 380)
-  const [x, z] = perp(m, o)
-  if (blocked(x, z)) continue
-  if (rand() < 0.5) continue
-  put(x, z, speciesFor(m), 0.7 + rand() * 0.5)
+  const o = (rand() < 0.5 ? -1 : 1) * (bandHalf(m) + 60 + rand() * 360)
+  const [cx, cz] = perp(m, o)
+  if (blocked(cx, cz)) continue
+  made++
+  const n = 2 + Math.floor(rand() * 3)
+  for (let k = 0; k < n; k++) {
+    const x = cx + (rand() * 2 - 1) * 9
+    const z = cz + (rand() * 2 - 1) * 9
+    if (blocked(x, z)) continue
+    put(x, z, speciesFor(m), 0.7 + rand() * 0.45)
+  }
+}
+
+/* 3б) парковые рощи у landform-холмов и озёр (вторичные парки) */
+for (const lf of alm.landforms) {
+  const n = 26 + Math.floor(rand() * 22)
+  for (let k = 0; k < n; k++) {
+    const a = rand() * Math.PI * 2
+    const rr = (0.35 + Math.sqrt(rand()) * 0.85) * lf.r
+    const x = lf.x + Math.cos(a) * rr
+    const z = lf.z + Math.sin(a) * rr
+    if (blocked(x, z)) continue
+    put(x, z, rand() < 0.55 ? 1 : 0, 0.8 + rand() * 0.7)
+  }
+}
+for (const l of alm.lakes) {
+  const n = 60
+  for (let k = 0; k < n; k++) {
+    const a = rand() * Math.PI * 2
+    const rr = 1.15 + rand() * 0.55
+    const x = l.x + Math.cos(a) * l.rx * rr
+    const z = l.z + Math.sin(a) * l.rz * rr
+    if (blocked(x, z)) continue
+    put(x, z, rand() < 0.4 ? 3 : speciesFor(0), 0.8 + rand() * 0.6)
+  }
 }
 
 /* 4) Yesil пойменные ивы у реки/веток */

@@ -12,7 +12,7 @@
 
 | Файл | Job ID | Назначение |
 |---|---|---|
-| `sky/steppe_sky.png` | `d01b9ad4-253c-40af-ab04-2839c3256b8a` | Equirect-панорама степного неба (env + фон) |
+| `sky/steppe_sky.png` | `c849f785-2636-4a1d-b7d7-f8ab5dd0a3f9` | Equirect-панорама дневного степного неба (env + фон); v1 закатная: `d01b9ad4-…` |
 | `textures/facade_brick.png` | `0a6bd47d-1ba6-4797-92ca-616d8cfa048f` | Фасадный атлас: кирпич, 4–6 эт. |
 | `textures/facade_stone.png` | `b2b54eca-e230-441b-b931-77e0f333b1b3` | Фасадный атлас: камень/травертин |
 | `textures/facade_white.png` | `7989d04b-fb13-41d1-b9a5-dc4fdfe24904` | Фасадный атлас: светлая штукатурка |
