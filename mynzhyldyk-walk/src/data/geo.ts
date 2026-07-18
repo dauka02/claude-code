@@ -154,6 +154,18 @@ export function inWater(x: number, z: number): boolean {
   return inLake(x, z, 1) || riverDist(x, z) < ALM.river.width / 2
 }
 
+/* -------- полигон участка (для зонирования земли) -------- */
+export function inSite(x: number, z: number): boolean {
+  const poly = ALM.sitePoly
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, zi] = poly[i]
+    const [xj, zj] = poly[j]
+    if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside
+  }
+  return inside
+}
+
 /* -------- рельеф -------- */
 function hash2(x: number, y: number): number {
   const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
