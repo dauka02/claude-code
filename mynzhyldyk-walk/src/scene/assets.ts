@@ -23,6 +23,7 @@ export const TEX = {
   tree4: '/assets/textures/tree_maple.png',
   tree5: '/assets/textures/tree_apple.png',
   tree6: '/assets/textures/tree_blossom.png',
+  diagrid: '/assets/textures/diagrid.png',
   meadow0: '/assets/textures/meadow_purple.png',
   meadow1: '/assets/textures/meadow_pink.png',
   meadow2: '/assets/textures/meadow_grass.png',
