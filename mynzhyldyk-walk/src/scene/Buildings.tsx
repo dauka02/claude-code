@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { useMemo } from 'react'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { ALM, bandHalf, inLake, perp, riverDist, spineAt, L } from '../data/geo'
+import { ribbon } from './util'
 import {
   fbFacadeBrick,
   fbFacadeStone,
@@ -175,44 +176,182 @@ function FacadeSet({ blocks, tex }: { blocks: Block[]; tex: THREE.Texture }) {
   )
 }
 
-/** Вокзал Nurly Zhol: длинный объём с волнообразной крышей. */
+/** Вокзал Nurly Zhol по фото (docs/landmarks-spec.md): 450 м, большая волна
+    крыши, diagrid-фасад, надпись, два дуговых пандуса, регулярная площадь,
+    низкий терминал, переход-труба в парк. */
 function NurlyZhol() {
   const m = ALM.lrt.stationAtM
   const s = spineAt(Math.min(m, L - 10))
   const [x, z] = perp(Math.min(m, L - 10), -195)
   const rot = -Math.atan2(s.dz, s.dx)
-  const roof = useMemo(() => {
-    const pts: THREE.Vector2[] = []
-    const LEN = 240
-    for (let i = 0; i <= 40; i++) {
-      const t = i / 40
-      pts.push(new THREE.Vector2(-LEN / 2 + LEN * t, 24 + Math.sin(t * Math.PI) * 9 + Math.sin(t * Math.PI * 3) * 1.5))
-    }
+
+  // профиль кровли: торцы 21 → провалы 17 → асимметричная волна до 43
+  const profileH = (t: number) => {
+    const u = t * 2 - 1 // -1..1
+    const wave = 26 * Math.exp(-((u - 0.06) * (u - 0.06)) / 0.09)
+    const dip = -4 * Math.exp(-((Math.abs(u) - 0.55) * (Math.abs(u) - 0.55)) / 0.02)
+    return 21 + wave + dip - 4 * u * u
+  }
+  const body = useMemo(() => {
     const shape = new THREE.Shape()
-    shape.moveTo(-120, 0)
-    for (const p of pts) shape.lineTo(p.x, p.y - 22)
-    shape.lineTo(120, 0)
-    shape.lineTo(-120, 0)
-    const g = new THREE.ExtrudeGeometry(shape, { depth: 46, bevelEnabled: false })
-    g.rotateX(-Math.PI / 2)
-    g.rotateY(Math.PI / 2)
+    shape.moveTo(-225, 0)
+    for (let i = 0; i <= 60; i++) {
+      const t = i / 60
+      shape.lineTo(-225 + 450 * t, profileH(t))
+    }
+    shape.lineTo(225, 0)
+    shape.lineTo(-225, 0)
+    const g = new THREE.ExtrudeGeometry(shape, { depth: 78, bevelEnabled: false })
+    g.translate(0, 0, -39)
     g.rotateY(rot)
-    g.translate(x, 21, z)
+    g.translate(x, 0.4, z)
     return g
-  }, [x, z, rot])
+  }, [x, z, rot]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // diagrid-фасад: Higgsfield-текстура + канвас-фолбэк
+  const diagrid = useTexOr(
+    'diagrid',
+    () => {
+      const cv = document.createElement('canvas')
+      cv.width = 512
+      cv.height = 256
+      const c = cv.getContext('2d')!
+      c.fillStyle = '#3e5450'
+      c.fillRect(0, 0, 512, 256)
+      c.strokeStyle = 'rgba(205,212,214,0.9)'
+      c.lineWidth = 3
+      for (let i = -8; i < 24; i++) {
+        c.beginPath(); c.moveTo(i * 32, 0); c.lineTo(i * 32 + 256, 256); c.stroke()
+        c.beginPath(); c.moveTo(i * 32 + 256, 0); c.lineTo(i * 32, 256); c.stroke()
+      }
+      return new THREE.CanvasTexture(cv)
+    },
+    [9, 1.5],
+  )
+
+  const signTex = useMemo(() => {
+    const cv = document.createElement('canvas')
+    cv.width = 1024
+    cv.height = 128
+    const c = cv.getContext('2d')!
+    c.fillStyle = '#2e3438'
+    c.fillRect(0, 0, 1024, 128)
+    c.fillStyle = '#f0f2f4'
+    c.font = 'bold 62px Inter, sans-serif'
+    c.textAlign = 'center'
+    c.textBaseline = 'middle'
+    c.fillText('НҰРЛЫ ЖОЛ  •  NURLY ZHOL', 512, 66)
+    const t = new THREE.CanvasTexture(cv)
+    t.colorSpace = THREE.SRGBColorSpace
+    return t
+  }, [])
+
+  // дуговые пандусы к входу (+6.2) с опорами
+  const ramps = useMemo(() => {
+    const parts: THREE.BufferGeometry[] = []
+    const posts: THREE.BufferGeometry[] = []
+    for (const sd of [-1, 1]) {
+      const pts: [number, number][] = []
+      for (let i = 0; i <= 24; i++) {
+        const a = Math.PI * (0.5 - 0.42 * (i / 24))
+        pts.push([sd * Math.cos(a) * 130, 46 + Math.sin(a) * 92 - 92])
+      }
+      const rr = ribbon(pts, 8, (px: number, pz: number) => {
+        void px
+        const t = Math.max(0, Math.min(1, (46 - pz) / 92))
+        return 0.4 + t * 5.8
+      }, 6, 0)
+      parts.push(rr.index ? rr.toNonIndexed() : rr)
+      for (let i = 2; i <= 22; i += 3) {
+        const a = Math.PI * (0.5 - 0.42 * (i / 24))
+        const px = sd * Math.cos(a) * 130
+        const pz = 46 + Math.sin(a) * 92 - 92
+        const t = Math.max(0, Math.min(1, (46 - pz) / 92))
+        const h = 0.4 + t * 5.8
+        const post = new THREE.CylinderGeometry(0.5, 0.6, h, 8)
+        post.translate(px, h / 2, pz)
+        posts.push(post.toNonIndexed())
+      }
+    }
+    return {
+      deck: mergeGeometries(parts, false)!,
+      posts: mergeGeometries(posts, false)!,
+    }
+  }, [])
+
   return (
     <group>
-      <mesh geometry={roof} castShadow>
-        <meshStandardMaterial color="#cfd4d6" roughness={0.35} metalness={0.5} />
+      {/* корпус: diagrid по фасадам, металл кровли по контуру */}
+      <mesh geometry={body} castShadow>
+        <meshStandardMaterial map={diagrid} roughness={0.35} metalness={0.45} />
       </mesh>
       <group position={[x, 0, z]} rotation={[0, rot, 0]}>
-        <mesh position={[0, 10, 0]} castShadow>
-          <boxGeometry args={[236, 20, 42]} />
-          <meshPhysicalMaterial color="#a8c4cc" roughness={0.2} metalness={0.3} transparent opacity={0.6} />
+        {/* торцевые «клювы» крыши */}
+        {[-1, 1].map((sd) => (
+          <mesh key={sd} position={[sd * 227, 15, 0]} rotation={[0, 0, sd * 0.5]} castShadow>
+            <cylinderGeometry args={[4.5, 4.5, 80, 12, 1, true, 0, Math.PI]} />
+            <meshStandardMaterial color="#cfd4d6" roughness={0.35} metalness={0.5} side={THREE.DoubleSide} />
+          </mesh>
+        ))}
+        {/* надпись на фасаде к парку */}
+        <mesh position={[0, 17, 40.2]}>
+          <planeGeometry args={[96, 6.2]} />
+          <meshStandardMaterial map={signTex} roughness={0.6} />
         </mesh>
-        <mesh position={[0, 1, 30]} receiveShadow>
-          <boxGeometry args={[280, 2, 24]} />
-          <meshStandardMaterial color="#c4beb0" roughness={0.9} />
+        {/* пандусы + площадь между ними */}
+        <group position={[0, 0, 48]}>
+          <mesh geometry={ramps.deck} castShadow>
+            <meshStandardMaterial color="#b8b2a6" roughness={0.8} />
+          </mesh>
+          <mesh geometry={ramps.posts}>
+            <meshStandardMaterial color="#8a867c" roughness={0.85} />
+          </mesh>
+          {/* регулярные газоны и ряды деревьев */}
+          {Array.from({ length: 10 }, (_, i) => {
+            const gx = -58 + (i % 5) * 29
+            const gz = 26 + Math.floor(i / 5) * 16
+            return (
+              <group key={i}>
+                <mesh position={[gx, 0.25, gz]} receiveShadow>
+                  <boxGeometry args={[20, 0.5, 8]} />
+                  <meshStandardMaterial color="#5f7c3e" roughness={0.95} />
+                </mesh>
+                {[-6, 0, 6].map((tx) => (
+                  <group key={tx} position={[gx + tx, 0.5, gz]}>
+                    <mesh position={[0, 1.4, 0]}>
+                      <cylinderGeometry args={[0.07, 0.1, 2.8, 5]} />
+                      <meshStandardMaterial color="#6b5a48" roughness={0.85} />
+                    </mesh>
+                    <mesh position={[0, 3.2, 0]} castShadow>
+                      <icosahedronGeometry args={[1.3, 0]} />
+                      <meshStandardMaterial color="#6d9552" roughness={0.95} flatShading />
+                    </mesh>
+                  </group>
+                ))}
+              </group>
+            )
+          })}
+          {/* входная платформа */}
+          <mesh position={[0, 3.1, -6]} castShadow>
+            <boxGeometry args={[120, 6.2, 14]} />
+            <meshStandardMaterial color="#c4beb0" roughness={0.85} />
+          </mesh>
+        </group>
+        {/* низкий терминал с волнистой кромкой (север) */}
+        <group position={[150, 0, 62]}>
+          <mesh position={[0, 6, 0]} castShadow>
+            <boxGeometry args={[80, 12, 30]} />
+            <meshPhysicalMaterial color="#a8c4cc" roughness={0.2} metalness={0.3} transparent opacity={0.65} />
+          </mesh>
+          <mesh position={[0, 12.6, 0]}>
+            <boxGeometry args={[84, 1.2, 34]} />
+            <meshStandardMaterial color="#cfd4d6" roughness={0.35} metalness={0.5} />
+          </mesh>
+        </group>
+        {/* переход-труба в парк */}
+        <mesh position={[-40, 8, 76]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[3.4, 3.4, 62, 14, 1, true]} />
+          <meshPhysicalMaterial color="#cfd8da" roughness={0.25} metalness={0.4} transparent opacity={0.7} side={THREE.DoubleSide} />
         </mesh>
       </group>
     </group>

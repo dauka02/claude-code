@@ -5,6 +5,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ALM, heightAt, perp, spineAt, WATER_Y } from '../data/geo'
 import { fbDiamond, fbGranite, mkWood, useTexOr } from '../scene/assets'
 import { ribbon, resample } from '../scene/util'
+import KazakEli from './KazakEli'
 
 const MODELS = {
   pavilion: '/assets/models/pavilion.glb',
@@ -65,192 +66,6 @@ function canvasTex(w: number, h: number, draw: (c: CanvasRenderingContext2D) => 
   const t = new THREE.CanvasTexture(cv)
   t.colorSpace = THREE.SRGBColorSpace
   return t
-}
-
-/* D1 Capital — площадь «Қазақ Елі» (презентация стр.4-6):
-   монумент с Самруком, конус «Шабыт», Дворец Независимости, боскеты в кадках,
-   красная сетка мощения, водная лента, юрты южнее. */
-function Capital() {
-  const granite = useTexOr('granite', fbGranite, [14, 14])
-  const [ix, iz] = mk('1')
-  const py = heightAt(ix, iz)
-
-  // боскеты: гранитные кадки с рощицами и лавками по флангам площади
-  const bosque = useMemo(() => {
-    const stone: THREE.BufferGeometry[] = []
-    const trunks: THREE.BufferGeometry[] = []
-    const crowns: THREE.BufferGeometry[] = []
-    let s = 833
-    const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646
-    const planters: [number, number][] = []
-    for (let k = 0; k < 4; k++) {
-      planters.push([ix - 72 + k * 16.5, iz - 40], [ix - 72 + k * 16.5, iz + 40])
-      planters.push([ix + 24 + k * 16.5, iz - 40], [ix + 24 + k * 16.5, iz + 40])
-    }
-    for (const [cx, cz] of planters) {
-      const box = new THREE.BoxGeometry(14, 0.55, 14)
-      box.translate(cx, py + 0.28, cz)
-      stone.push(box)
-      const bench = new THREE.BoxGeometry(14.6, 0.12, 0.5)
-      bench.translate(cx, py + 0.62, cz + 7.3)
-      stone.push(bench)
-      for (let t = 0; t < 6; t++) {
-        const tx = cx - 4.5 + (t % 3) * 4.5 + rnd() * 1.5
-        const tz = cz - 3 + Math.floor(t / 3) * 5.5 + rnd() * 1.5
-        const th = 4.5 + rnd() * 2.2
-        const trunk = new THREE.CylinderGeometry(0.07, 0.1, th * 0.5, 5)
-        trunk.translate(tx, py + 0.55 + th * 0.25, tz)
-        trunks.push(trunk)
-        const crown = new THREE.IcosahedronGeometry(th * 0.3, 0)
-        crown.scale(1, 1.5, 1)
-        crown.translate(tx, py + 0.55 + th * 0.72, tz)
-        crowns.push(crown.toNonIndexed())
-      }
-    }
-    return {
-      stone: mergeGeometries(stone, false)!,
-      trunks: mergeGeometries(trunks, false)!,
-      crowns: mergeGeometries(crowns, false)!,
-    }
-  }, [ix, iz, py])
-
-  // красные акцентные полосы мощения (сетка, как на фото 2024)
-  const redGrid = useMemo(() => {
-    const parts: THREE.BufferGeometry[] = []
-    for (let i = 0; i < 7; i++) {
-      const g = new THREE.PlaneGeometry(2.2, 118)
-      g.rotateX(-Math.PI / 2)
-      g.rotateY(0.26)
-      const px = ix - 66 + i * 22
-      g.translate(px, py + 0.045, iz)
-      parts.push(g)
-    }
-    for (let i = 0; i < 5; i++) {
-      const g = new THREE.PlaneGeometry(186, 2.2)
-      g.rotateX(-Math.PI / 2)
-      g.rotateY(0.26)
-      g.translate(ix, py + 0.045, iz - 44 + i * 22)
-      parts.push(g)
-    }
-    return mergeGeometries(parts, false)!
-  }, [ix, iz, py])
-
-  // решётка Дворца Независимости
-  const lattice = useMemo(
-    () =>
-      canvasTex(256, 256, (c) => {
-        c.fillStyle = '#1e3a5c'
-        c.fillRect(0, 0, 256, 256)
-        c.strokeStyle = 'rgba(235,240,245,0.9)'
-        c.lineWidth = 5
-        for (let i = -8; i < 16; i++) {
-          c.beginPath()
-          c.moveTo(i * 32, 0)
-          c.lineTo(i * 32 + 256, 256)
-          c.stroke()
-          c.beginPath()
-          c.moveTo(i * 32 + 256, 0)
-          c.lineTo(i * 32, 256)
-          c.stroke()
-        }
-      }),
-    [],
-  )
-  useMemo(() => {
-    lattice.wrapS = lattice.wrapT = THREE.RepeatWrapping
-    lattice.repeat.set(3, 2)
-  }, [lattice])
-
-  return (
-    <group>
-      <mesh position={[ix, py + 0.03, iz]} rotation={[-Math.PI / 2, 0, 0.26]} receiveShadow>
-        <planeGeometry args={[190, 120]} />
-        <meshStandardMaterial map={granite} roughness={0.85} />
-      </mesh>
-      <mesh geometry={redGrid} receiveShadow>
-        <meshStandardMaterial color="#9c4a38" roughness={0.9} />
-      </mesh>
-      {/* монумент «Қазақ Елі»: стилобат, колонна, золотой Самрук */}
-      <group position={[ix, py, iz]}>
-        <mesh position={[0, 0.45, 0]} castShadow>
-          <cylinderGeometry args={[15, 16.5, 0.9, 36]} />
-          <meshStandardMaterial color="#e8e5de" roughness={0.55} />
-        </mesh>
-        <mesh position={[0, 1.1, 0]}>
-          <cylinderGeometry args={[11, 11.6, 0.5, 36]} />
-          <meshStandardMaterial color="#f0ede6" roughness={0.5} />
-        </mesh>
-        <mesh position={[0, 22, 0]} castShadow>
-          <cylinderGeometry args={[1.15, 1.7, 42, 14]} />
-          <meshStandardMaterial color="#f2f0ea" roughness={0.35} />
-        </mesh>
-        <mesh position={[0, 43.6, 0]}>
-          <cylinderGeometry args={[1.5, 1.15, 1.2, 14]} />
-          <meshStandardMaterial color="#f2f0ea" roughness={0.35} />
-        </mesh>
-        {/* Самрук */}
-        <mesh position={[0, 45, 0]} castShadow>
-          <sphereGeometry args={[1.05, 10, 8]} />
-          <meshStandardMaterial color="#d8a828" metalness={0.85} roughness={0.25} />
-        </mesh>
-        <mesh position={[-1.6, 45.3, 0]} rotation={[0, 0, 0.55]}>
-          <boxGeometry args={[3.2, 0.16, 0.9]} />
-          <meshStandardMaterial color="#d8a828" metalness={0.85} roughness={0.25} />
-        </mesh>
-        <mesh position={[1.6, 45.3, 0]} rotation={[0, 0, -0.55]}>
-          <boxGeometry args={[3.2, 0.16, 0.9]} />
-          <meshStandardMaterial color="#d8a828" metalness={0.85} roughness={0.25} />
-        </mesh>
-      </group>
-      {/* «Шабыт» — синий стеклянный конус */}
-      <mesh position={[ix - 76, py + 11, iz - 74]} castShadow>
-        <cylinderGeometry args={[15, 25, 22, 26]} />
-        <meshPhysicalMaterial color="#2a5f94" roughness={0.12} metalness={0.35} envMapIntensity={1.8} transparent opacity={0.92} />
-      </mesh>
-      {/* Дворец Независимости — ромбо-решётка */}
-      <mesh position={[ix + 74, py + 11, iz - 72]} rotation={[0, 0.26, 0]} castShadow>
-        <boxGeometry args={[54, 22, 32]} />
-        <meshStandardMaterial map={lattice} roughness={0.4} metalness={0.3} />
-      </mesh>
-      {/* боскеты */}
-      <mesh geometry={bosque.stone} castShadow receiveShadow>
-        <meshStandardMaterial color="#b8b2a6" roughness={0.8} />
-      </mesh>
-      <mesh geometry={bosque.trunks}>
-        <meshStandardMaterial color="#e8e4dc" roughness={0.8} />
-      </mesh>
-      <mesh geometry={bosque.crowns} castShadow>
-        <meshStandardMaterial color="#6d9552" roughness={0.95} flatShading />
-      </mesh>
-      {/* водная лента вдоль южной кромки */}
-      <mesh position={[ix, py + 0.07, iz + 56]} rotation={[-Math.PI / 2, 0, 0.26]}>
-        <planeGeometry args={[150, 4.5]} />
-        <meshStandardMaterial color="#2a4a52" roughness={0.05} metalness={0.4} envMapIntensity={1.6} />
-      </mesh>
-      {/* флагштоки */}
-      {Array.from({ length: 6 }, (_, i) => (
-        <mesh key={i} position={[ix - 50 + i * 20, py + 9, iz - 52]} castShadow>
-          <cylinderGeometry args={[0.09, 0.13, 18, 6]} />
-          <meshStandardMaterial color="#cfd2d4" metalness={0.7} roughness={0.3} />
-        </mesh>
-      ))}
-      {/* юрты-купола в южном парке */}
-      {([[ix - 60, iz + 120, 5], [ix - 28, iz + 132, 4], [ix + 6, iz + 124, 5.5], [ix + 42, iz + 134, 3.6], [ix + 74, iz + 122, 4.6]] as [number, number, number][]).map(
-        ([yx, yz, r], i) => (
-          <group key={i} position={[yx, heightAt(yx, yz), yz]}>
-            <mesh castShadow>
-              <sphereGeometry args={[r, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-              <meshStandardMaterial color="#ece8de" roughness={0.85} />
-            </mesh>
-            <mesh position={[0, r * 0.96, 0]}>
-              <cylinderGeometry args={[0.3, 0.5, 0.5, 8]} />
-              <meshStandardMaterial color="#b09a70" roughness={0.8} />
-            </mesh>
-          </group>
-        ),
-      )}
-    </group>
-  )
 }
 
 /* D2 Millennium: детские площадки */
@@ -688,7 +503,7 @@ function Yesil() {
 export default function Quarters() {
   return (
     <group>
-      <Capital />
+      <KazakEli />
       <Millennium />
       <CentralPark />
       <Hub />
