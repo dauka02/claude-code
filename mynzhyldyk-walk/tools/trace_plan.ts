@@ -131,7 +131,9 @@ const oBike = (m: number) => {
 }
 const oRun = (m: number) => {
   const w = bandHalf(m)
-  return Math.sin(m * 0.0016 + 0.8) * w * 0.2 + Math.sin(m * 0.0087 + 2.6) * w * 0.42
+  // беговая обходит озеро Мыңжылдық с севера (план 5.6: петля у Station Park)
+  const lakeDodge = -52 * Math.exp(-((m - 4200) * (m - 4200)) / (2 * 95 * 95))
+  return Math.sin(m * 0.0016 + 0.8) * w * 0.2 + Math.sin(m * 0.0087 + 2.6) * w * 0.42 + lakeDodge
 }
 const walk: Pt[] = []
 const bike: Pt[] = []
@@ -154,10 +156,11 @@ for (let m = 300; m < L - 260; m += 370) {
   paths2.push(seg)
 }
 
-/* LRT */
+/* LRT: РЕАЛЬНАЯ трассировка — вдоль оси линии НЕТ. Существующая эстакада идёт
+   по ул. Калдаякова (рисуется в LRT.tsx по city_shamshi) и вдоль ж/д-коридора
+   мимо вокзала Nurly Zhol — здесь только привокзальный сегмент. */
 const lrtPts: Pt[] = []
-for (let m = 0; m <= pts.lrt.stationAtM - 220; m += 140) lrtPts.push(perp(m, pts.lrt.offsetM))
-lrtPts.push(perp(pts.lrt.stationAtM - 120, pts.lrt.offsetM - 40), perp(pts.lrt.stationAtM, -150))
+for (let m = 4020; m <= 4780; m += 80) lrtPts.push(perp(m, -150))
 
 /* вода */
 const river = pts.riverPx.map(toWorld)
@@ -165,6 +168,13 @@ const lakes = pts.lakesPx.map((l: { id: string; cx: number; cy: number; rxM: num
   const [x, z] = toWorld([l.cx, l.cy])
   return { id: l.id, x, z, rx: l.rxM, rz: l.rzM, rot: 0 }
 })
+// озеро Мыңжылдық — по маркеру 22 легенды (в привокзальном парке у вокзала),
+// чуть южнее оси, чтобы дорожки прошли севернее (план 5.6)
+{
+  const i = lakes.findIndex((l: { id: string }) => l.id === 'mynzhyldyk')
+  const [lx, lz] = perp(4177, 84)
+  lakes[i] = { id: 'mynzhyldyk', x: +lx.toFixed(1), z: +lz.toFixed(1), rx: 108, rz: 36, rot: 0 }
+}
 /* SuDS-каналы: от Raindrops к озеру Galaxy и в Yesil */
 const m12 = toWorld(pts.markersPx['14'])
 const suds = [

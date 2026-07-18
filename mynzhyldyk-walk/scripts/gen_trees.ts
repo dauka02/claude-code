@@ -146,7 +146,25 @@ while (made < CLUSTERS && guard++ < CLUSTERS * 40) {
     const z = cz + Math.sin(a) * rr
     if (blocked(x, z)) continue
     const sp = rand() < 0.75 ? dominant : speciesFor(m)
-    put(x, z, sp, 0.7 + rand() * 0.75)
+    put(x, z, sp, 0.6 + rand() * 1.15)
+  }
+}
+
+/* 1б) аллейные деревья у самих дорожек — кроны нависают над путями */
+{
+  const walkP = alm.alley.walk as Pt[]
+  for (let i = 1; i < walkP.length - 1; i += 1) {
+    if (rand() < 0.45) continue
+    const [x0, z0] = walkP[i]
+    const [x1, z1] = walkP[i + 1]
+    const len = Math.hypot(x1 - x0, z1 - z0) || 1
+    const nx = -(z1 - z0) / len
+    const nz = (x1 - x0) / len
+    const side = i % 2 ? 1 : -1
+    const x = x0 + nx * side * (4.3 + rand() * 1.4)
+    const z = z0 + nz * side * (4.3 + rand() * 1.4)
+    if (blocked(x, z)) continue
+    put(x, z, rand() < 0.6 ? 2 : 4, 1.15 + rand() * 0.55)
   }
 }
 
