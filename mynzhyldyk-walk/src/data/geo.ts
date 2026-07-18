@@ -77,12 +77,12 @@ export function quarterAt(m: number): string {
 }
 
 export const QUARTER_INFO: Record<string, { ru: string; en: string; tagline: string }> = {
-  capital: { ru: 'Столичный квартал', en: 'Capital Quarter', tagline: 'формальность, партеры, выход к Ишиму' },
-  millennium: { ru: 'Квартал Миллениум', en: 'Millennium Quarter', tagline: 'скалы и ветер: перетекающие посадки, детские площадки' },
-  centralpark: { ru: 'Центральный парк', en: 'Central Park Quarter', tagline: 'гора, степь и озеро' },
-  hub: { ru: 'Хаб-квартал', en: 'Hub Quarter', tagline: 'Diamond Village: орнамент курак-корпе' },
-  station: { ru: 'Вокзальный квартал', en: 'Station Quarter', tagline: 'город и степь: дюны, вокзал Nurly Zhol' },
-  yesil: { ru: 'Долина Есиль', en: 'Yesil Valley Quarter', tagline: 'максимальная связь с природой' },
+  capital: { ru: 'Первый квартал · Столичный', en: 'Capital Quarter', tagline: 'площадь «Қазақ Елі», партеры, выход к Ишиму' },
+  millennium: { ru: 'Второй квартал · Миллениум', en: 'Millennium Quarter', tagline: 'скалы и ветер: перетекающие посадки, детские площадки' },
+  centralpark: { ru: 'Третий квартал · Центральный парк', en: 'Central Park Quarter', tagline: 'гора, степь и озеро' },
+  hub: { ru: 'Четвёртый квартал · Хаб', en: 'Hub Quarter', tagline: 'Diamond Village: орнамент курак-корпе' },
+  station: { ru: 'Пятый квартал · Привокзальный', en: 'Station Quarter', tagline: 'Привокзальный парк, вокзал Nurly Zhol' },
+  yesil: { ru: 'Шестой квартал · Долина Есиль', en: 'Yesil Valley Quarter', tagline: 'эко-парк: максимальная связь с природой' },
 }
 
 /* -------- хэш-сетка «твёрдых» лент (дороги/дорожки/LRT) -------- */
@@ -208,18 +208,19 @@ export function heightAt(x: number, z: number): number {
   const rd = riverDist(x, z)
   const rw = ALM.river.width / 2
   if (rd < rw + 30) h -= 3.6 * Math.max(0, 1 - Math.max(0, rd - rw * 0.4) / (rw + 30 - rw * 0.4)) ** 1.4
+  // дороги — широкая ровная полоса; дорожки — узкая, бермы подходят вплотную
+  if (nearLine(x, z, 7, ['road', 'suds'])) h *= 0.1
+  else if (nearLine(x, z, 1.4, ['path'])) h *= 0.1
+  else if (nearLine(x, z, 6.5, ['path'])) h *= 0.45
+  // привокзальная зона ровная (кроме озера южнее)
+  if (x > 4050 && x < 4750 && z > -300 && z < -46) h *= 0.1
+  // чаши озёр — ПОСЛЕ сглаживаний, чтобы котлован не гасился плоскими зонами
   for (const l of ALM.lakes) {
     const nx = (x - l.x) / (l.rx + 18)
     const nz = (z - l.z) / (l.rz + 18)
     const e = nx * nx + nz * nz
     if (e < 1.4) h -= 3.0 * Math.max(0, 1.1 - e) ** 1.3
   }
-  // дороги — широкая ровная полоса; дорожки — узкая, бермы подходят вплотную
-  if (nearLine(x, z, 7, ['road', 'suds'])) h *= 0.1
-  else if (nearLine(x, z, 1.4, ['path'])) h *= 0.1
-  else if (nearLine(x, z, 6.5, ['path'])) h *= 0.45
-  // привокзальная зона ровная
-  if (x > 4100 && x < 4750 && z > -300 && z < 60) h *= 0.1
   return h
 }
 

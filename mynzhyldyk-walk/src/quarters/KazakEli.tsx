@@ -1,7 +1,45 @@
 import * as THREE from 'three'
-import { useMemo } from 'react'
+import React, { Suspense, useMemo } from 'react'
+import { useGLTF } from '@react-three/drei'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { heightAt, perp, spineAt } from '../data/geo'
+
+class GLBB extends React.Component<{ fallback: React.ReactNode; children: React.ReactNode }, { failed: boolean }> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  componentDidCatch() {}
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+function GLBIn({ url, height, position, rotY }: { url: string; height: number; position: [number, number, number]; rotY: number }) {
+  const { scene } = useGLTF(url)
+  const obj = useMemo(() => {
+    const c = scene.clone(true)
+    const box = new THREE.Box3().setFromObject(c)
+    const size = new THREE.Vector3()
+    box.getSize(size)
+    c.scale.setScalar(height / (size.y || 1))
+    const b2 = new THREE.Box3().setFromObject(c)
+    c.position.y -= b2.min.y
+    c.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) o.castShadow = true
+    })
+    return c
+  }, [scene, height])
+  return <primitive object={obj} position={position} rotation={[0, rotY, 0]} />
+}
+function GLB(p: { url: string; height: number; position: [number, number, number]; rotY?: number; fallback: React.ReactNode }) {
+  return (
+    <GLBB fallback={p.fallback}>
+      <Suspense fallback={p.fallback}>
+        <GLBIn url={p.url} height={p.height} position={p.position} rotY={p.rotY ?? 0} />
+      </Suspense>
+    </GLBB>
+  )
+}
 
 /**
  * Площадь «Қазақ Елі» по фото (docs/landmarks-spec.md):
@@ -208,23 +246,14 @@ export default function KazakEli() {
         <cylinderGeometry args={[2.9, 1.9, 3, 18]} />
         <meshStandardMaterial {...WHITE} roughness={0.35} />
       </mesh>
-      {/* Самрук (фолбэк: тело + крылья) */}
-      <group position={[0, 97.4, 0]}>
-        <mesh castShadow>
-          <sphereGeometry args={[1.5, 10, 8]} />
-          <meshStandardMaterial {...GOLD} />
-        </mesh>
-        {[-1, 1].map((sd) => (
-          <mesh key={sd} position={[sd * 2.4, 0.7, 0]} rotation={[0, 0, sd * -0.6]}>
-            <boxGeometry args={[4.6, 0.22, 1.3]} />
-            <meshStandardMaterial {...GOLD} />
-          </mesh>
-        ))}
-        <mesh position={[0, 1.5, 0.9]} rotation={[0.5, 0, 0]}>
-          <coneGeometry args={[0.5, 1.6, 6]} />
-          <meshStandardMaterial {...GOLD} />
-        </mesh>
-      </group>
+      {/* Самрук: GLB-герой */}
+      <GLB
+        url="/assets/models/samruk.glb"
+        height={7}
+        position={[0, 94.2, 0]}
+        rotY={Math.PI / 2}
+        fallback={<SamrukFallback />}
+      />
 
       {/* «Шабыт» — СЗ от монумента */}
       <mesh geometry={shabyt} position={[-98, 17, -104]} castShadow>
@@ -251,7 +280,8 @@ export default function KazakEli() {
           <meshPhysicalMaterial color="#2a5f94" roughness={0.15} metalness={0.4} transparent opacity={0.92} />
         </mesh>
       </group>
-      {/* Мечеть Хазрет Султан — СЗ за дорогой (фолбэк) */}
+      {/* Мечеть Хазрет Султан — СЗ за дорогой: GLB-герой */}
+      <GLB url="/assets/models/mosque.glb" height={52} position={[-210, 0, -150]} rotY={Math.PI / 2} fallback={
       <group position={[-210, 0, -150]}>
         <mesh position={[0, 10, 0]} castShadow>
           <boxGeometry args={[64, 20, 64]} />
@@ -281,7 +311,7 @@ export default function KazakEli() {
             </mesh>
           </group>
         ))}
-      </group>
+      </group>} />
 
       {/* пр. Тауелсиздик: 10 полос поперёк оси перед площадью (запад) */}
       <mesh position={[-172, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
@@ -333,7 +363,8 @@ export default function KazakEli() {
         }
         return yurts
       }, []).map((y, i) => (
-        <group key={i} position={[y.x, 0, y.z]}>
+        <GLB key={i} url="/assets/models/yurt.glb" height={y.r * 1.75} position={[y.x, 0, y.z]} rotY={i * 0.9} fallback={
+        <group position={[y.x, 0, y.z]}>
           <mesh position={[0, y.r * 0.36, 0]} castShadow>
             <cylinderGeometry args={[y.r, y.r, y.r * 0.72, 16]} />
             <meshStandardMaterial color="#b6b2a8" roughness={0.9} />
@@ -346,8 +377,29 @@ export default function KazakEli() {
             <cylinderGeometry args={[y.r * 0.1, y.r * 0.14, y.r * 0.14, 8]} />
             <meshStandardMaterial color="#6b5a44" roughness={0.8} />
           </mesh>
-        </group>
+        </group>} />
       ))}
+    </group>
+  )
+}
+
+function SamrukFallback() {
+  return (
+    <group position={[0, 97.4, 0]}>
+      <mesh castShadow>
+        <sphereGeometry args={[1.5, 10, 8]} />
+        <meshStandardMaterial {...GOLD} />
+      </mesh>
+      {[-1, 1].map((sd) => (
+        <mesh key={sd} position={[sd * 2.4, 0.7, 0]} rotation={[0, 0, sd * -0.6]}>
+          <boxGeometry args={[4.6, 0.22, 1.3]} />
+          <meshStandardMaterial {...GOLD} />
+        </mesh>
+      ))}
+      <mesh position={[0, 1.5, 0.9]} rotation={[0.5, 0, 0]}>
+        <coneGeometry args={[0.5, 1.6, 6]} />
+        <meshStandardMaterial {...GOLD} />
+      </mesh>
     </group>
   )
 }

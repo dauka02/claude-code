@@ -154,7 +154,7 @@ function MeadowClumps({ variant }: { variant: number }) {
   const ref = useRef<THREE.InstancedMesh>(null!)
   const shaderRef = useRef<{ uniforms: { uTime: { value: number } } } | null>(null)
   const geo = useMemo(crossedPlanes, [])
-  const count = quality === 'high' ? 4200 : quality === 'med' ? 2200 : 800
+  const count = quality === 'high' ? 5600 : quality === 'med' ? 2800 : 1000
 
   useLayoutEffect(() => {
     let s = 5150 + variant * 917
@@ -168,13 +168,13 @@ function MeadowClumps({ variant }: { variant: number }) {
     while (placed < count && guard++ < count * 30) {
       let px: number
       let pz: number
-      if (rnd() < 0.62) {
-        // кромки дорожек и острова между нитями: ленты многолетников
+      if (rnd() < 0.74) {
+        // НЕПРЕРЫВНЫЕ бордюры многолетников по кромкам дорожек (рендеры стр.9-10)
         const src = rnd() < 0.55 ? walk : ALM.alley.bike
         const seg = src[Math.floor(rnd() * (src.length - 1))]
-        const off = (rnd() < 0.5 ? -1 : 1) * (3.6 + rnd() * 5.5)
-        px = seg[0] + off + (rnd() * 2 - 1) * 6
-        pz = seg[1] + (rnd() * 2 - 1) * 14
+        const off = (rnd() < 0.5 ? -1 : 1) * (2.7 + rnd() * 2.3)
+        px = seg[0] + off + (rnd() * 2 - 1) * 2.5
+        pz = seg[1] + (rnd() * 2 - 1) * 24
       } else {
         // бермы по флангам ленты
         const mm = rnd() * L
@@ -204,6 +204,55 @@ function MeadowClumps({ variant }: { variant: number }) {
         roughness={1}
         onBeforeCompile={windShader(shaderRef)}
       />
+    </instancedMesh>
+  )
+}
+
+/** Кустарниковый ярус: объёмные массы кустов вдоль дорожек и на островах. */
+function ShrubMasses() {
+  const quality = useApp((s) => s.quality)
+  const count = quality === 'high' ? 2400 : quality === 'med' ? 1200 : 500
+  const ref = useRef<THREE.InstancedMesh>(null!)
+  const geo = useMemo(() => {
+    const parts = [
+      new THREE.IcosahedronGeometry(1, 0),
+      new THREE.IcosahedronGeometry(0.7, 0).translate(0.8, -0.15, 0.3),
+      new THREE.IcosahedronGeometry(0.6, 0).translate(-0.7, -0.2, -0.4),
+    ].map((g) => g.toNonIndexed())
+    const m = mergeGeometries(parts, false)!
+    m.scale(1, 0.72, 1)
+    return m
+  }, [])
+
+  useLayoutEffect(() => {
+    let s = 9091
+    const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646
+    const m = new THREE.Matrix4()
+    const q = new THREE.Quaternion()
+    const up = new THREE.Vector3(0, 1, 0)
+    const walk = ALM.alley.walk
+    const bike = ALM.alley.bike
+    let placed = 0
+    let guard = 0
+    while (placed < count && guard++ < count * 30) {
+      const src = rnd() < 0.6 ? walk : bike
+      const seg = src[Math.floor(rnd() * (src.length - 1))]
+      const off = (rnd() < 0.5 ? -1 : 1) * (4.8 + rnd() * 3.4)
+      const px = seg[0] + off + (rnd() * 2 - 1) * 3
+      const pz = seg[1] + (rnd() * 2 - 1) * 20
+      if (nearLine(px, pz, 1.6) || inWater(px, pz)) continue
+      const sc = 0.7 + rnd() * 1.1
+      q.setFromAxisAngle(up, rnd() * 6.28)
+      m.compose(new THREE.Vector3(px, heightAt(px, pz) + sc * 0.5, pz), q, new THREE.Vector3(sc, sc, sc))
+      ref.current.setMatrixAt(placed++, m)
+    }
+    ref.current.count = placed
+    ref.current.instanceMatrix.needsUpdate = true
+  }, [count])
+
+  return (
+    <instancedMesh key={count} ref={ref} args={[geo, undefined, count]} castShadow frustumCulled={false}>
+      <meshStandardMaterial color="#436636" roughness={0.95} flatShading />
     </instancedMesh>
   )
 }
@@ -284,6 +333,7 @@ export default function Vegetation() {
         <SpeciesBatch key={sp + quality} sp={sp} quality={quality} />
       ))}
       <BlossomTrees />
+      <ShrubMasses />
       {[0, 1, 2].map((v) => (
         <MeadowClumps key={v} variant={v} />
       ))}
